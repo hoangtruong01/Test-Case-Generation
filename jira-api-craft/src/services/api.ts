@@ -95,12 +95,11 @@ export const api = {
           }))
         };
       }
+      return { collections: [] };
     } catch (err) {
       console.error('getPostmanCollections failed', err);
+      return { error: err instanceof Error ? err.message : 'Failed to load collections' };
     }
-
-    // fallback mock collections
-    await delay(400);
   },
 
   async getPostmanCollection(collectionId: string, apiKey?: string): Promise<{ collection: Record<string, unknown> } | { error: string }> {
@@ -198,8 +197,10 @@ export const api = {
 
       // unexpected shape
       console.warn("getProjects: unexpected response shape", response);
+      return [];
     } catch (err) {
       console.error("getProjects: backend request failed", err);
+      throw err;
     }
 
   },

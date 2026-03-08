@@ -1,4 +1,7 @@
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+
+const isWeb = Platform.OS === "web";
 
 const KEYS = {
   JIRA_SESSION: "jira_session",
@@ -11,11 +14,12 @@ const KEYS = {
 
 /**
  * Secure storage wrapper — replaces localStorage from web app.
- * Uses expo-secure-store for sensitive tokens on device.
+ * Uses expo-secure-store on native, falls back to localStorage on web.
  */
 export const storage = {
   async get(key: string): Promise<string | null> {
     try {
+      if (isWeb) return localStorage.getItem(key);
       return await SecureStore.getItemAsync(key);
     } catch {
       return null;
@@ -24,6 +28,10 @@ export const storage = {
 
   async set(key: string, value: string): Promise<void> {
     try {
+      if (isWeb) {
+        localStorage.setItem(key, value);
+        return;
+      }
       await SecureStore.setItemAsync(key, value);
     } catch {
       // silently fail
@@ -32,6 +40,10 @@ export const storage = {
 
   async remove(key: string): Promise<void> {
     try {
+      if (isWeb) {
+        localStorage.removeItem(key);
+        return;
+      }
       await SecureStore.deleteItemAsync(key);
     } catch {
       // silently fail

@@ -24,7 +24,7 @@ export const useAppStore = create<AppState>((set) => ({
   projects: [],
   setProjects: (projects) => set({ projects }),
   selectedProject: null,
-  setSelectedProject: (selectedProject) => set({ selectedProject }),
+  setSelectedProject: (selectedProject) => set({ selectedProject, issues: [] }),
 
   issues: [],
   setIssues: (issues) => set({ issues }),

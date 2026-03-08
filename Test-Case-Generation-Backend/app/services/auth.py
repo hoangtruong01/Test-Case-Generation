@@ -30,12 +30,18 @@ async def jira_login(request: Request) -> RedirectResponse:
     )
 
     request.session["oauth_state"] = state
+    # Preserve mobile flag so callback can redirect via deep link
+    if request.query_params.get("mobile") == "1":
+        request.session["mobile"] = True
     return RedirectResponse(authorization_url)
 
 
 async def jira_callback(request: Request) -> RedirectResponse:
     returned_state = request.query_params.get("state")
     expected_state = request.session.get("oauth_state")
+
+    # Detect if the request originated from a mobile client
+    is_mobile = request.session.get("mobile") or request.query_params.get("mobile") == "1"
 
     if not expected_state or returned_state != expected_state:
         raise HTTPException(
@@ -90,7 +96,11 @@ async def jira_callback(request: Request) -> RedirectResponse:
         "user": user_info_json,
     }
 
-    redirect_url = f"http://localhost:5173/dashboard/projects?{urlencode(redirect_params)}"
+    if is_mobile:
+        # Deep link back to mobile app
+        redirect_url = f"{settings.MOBILE_SCHEME}://callback?{urlencode(redirect_params)}"
+    else:
+        redirect_url = f"{settings.FRONTEND_URL}/dashboard/projects?{urlencode(redirect_params)}"
     return RedirectResponse(redirect_url)
 
 

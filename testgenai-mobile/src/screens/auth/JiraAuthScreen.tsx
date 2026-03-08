@@ -5,13 +5,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuthStore } from "../../store/authStore";
 import { Button } from "../../components/ui/Button";
-import { TextInput } from "../../components/ui/TextInput";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { API_BASE_URL } from "../../config/apiconfig";
 import * as WebBrowser from "expo-web-browser";
@@ -25,29 +23,18 @@ const JiraAuthScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const { loginJira } = useAuthStore();
   const [loading, setLoading] = useState(false);
-  const [credentials, setCredentials] = useState({
-    username: "",
-    password: "",
-  });
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
-    if (!credentials.username || !credentials.password) {
-      setError("Please enter both username and password");
-      return;
-    }
     setError("");
     setLoading(true);
 
     try {
       // Open the backend OAuth login in an in-app browser.
       // The backend redirects back with token/session params.
-      const params = new URLSearchParams({
-        username: credentials.username,
-        password: credentials.password,
-      });
+      // Pass mobile=1 so the backend callback uses the deep link scheme.
       const result = await WebBrowser.openAuthSessionAsync(
-        `${API_BASE_URL}/jira/login?${params.toString()}`,
+        `${API_BASE_URL}/jira/login?mobile=1`,
         "testgenai://callback",
       );
 
@@ -77,41 +64,6 @@ const JiraAuthScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleDemoLogin = async () => {
-    setCredentials({ username: "sarah.chen", password: "password123" });
-    // Auto-submit with demo credentials
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        username: "sarah.chen",
-        password: "password123",
-      });
-      const result = await WebBrowser.openAuthSessionAsync(
-        `${API_BASE_URL}/jira/login?${params.toString()}`,
-        "testgenai://callback",
-      );
-
-      if (result.type === "success" && result.url) {
-        const url = new URL(result.url);
-        const token = url.searchParams.get("token");
-        const session = url.searchParams.get("session");
-        const userParam = url.searchParams.get("user");
-
-        if (token && userParam && session) {
-          const user = JSON.parse(userParam);
-          await loginJira(user, token, session);
-          Toast.show({ type: "success", text1: `Welcome, ${user.name}!` });
-          navigation.replace("Dashboard");
-          return;
-        }
-      }
-    } catch (err) {
-      setError("Demo login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
@@ -126,14 +78,15 @@ const JiraAuthScreen: React.FC<Props> = ({ navigation }) => {
           <Ionicons name="log-in-outline" size={32} color={colors.primary} />
         </View>
         <Text style={[styles.title, { color: colors.text }]}>
-          Login to Jira
+          Connect to Jira
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Connect to your Jira workspace to access projects and issues
+          Sign in with your Atlassian account to access your Jira projects and
+          issues
         </Text>
       </View>
 
-      {/* Demo credentials */}
+      {/* Info box */}
       <View
         style={[
           styles.demoBox,
@@ -141,57 +94,21 @@ const JiraAuthScreen: React.FC<Props> = ({ navigation }) => {
         ]}
       >
         <Text style={[styles.demoTitle, { color: colors.text }]}>
-          Demo Credentials:
+          How it works:
         </Text>
         <Text style={[styles.demoText, { color: colors.textSecondary }]}>
-          Username: sarah.chen, john.doe, or admin
+          1. Tap "Connect with Jira" below
         </Text>
         <Text style={[styles.demoText, { color: colors.textSecondary }]}>
-          Password: password123 or admin
+          2. Sign in with your Atlassian account
         </Text>
-        <TouchableOpacity
-          style={[styles.demoBtn, { backgroundColor: colors.border }]}
-          onPress={handleDemoLogin}
-          disabled={loading}
-        >
-          <Text style={[styles.demoBtnText, { color: colors.textSecondary }]}>
-            Quick Demo Login
-          </Text>
-        </TouchableOpacity>
+        <Text style={[styles.demoText, { color: colors.textSecondary }]}>
+          3. Authorize access to your Jira workspace
+        </Text>
+        <Text style={[styles.demoText, { color: colors.textSecondary }]}>
+          4. You'll be redirected back automatically
+        </Text>
       </View>
-
-      {/* Form */}
-      <TextInput
-        label="Username or Email"
-        placeholder="Enter your username or email"
-        value={credentials.username}
-        onChangeText={(text) =>
-          setCredentials({ ...credentials, username: text })
-        }
-        autoCapitalize="none"
-        editable={!loading}
-        leftIcon={
-          <Ionicons name="person-outline" size={18} color={colors.textMuted} />
-        }
-      />
-
-      <TextInput
-        label="Password"
-        placeholder="Enter your password"
-        value={credentials.password}
-        onChangeText={(text) =>
-          setCredentials({ ...credentials, password: text })
-        }
-        isPassword
-        editable={!loading}
-        leftIcon={
-          <Ionicons
-            name="lock-closed-outline"
-            size={18}
-            color={colors.textMuted}
-          />
-        }
-      />
 
       {error ? (
         <View
@@ -211,7 +128,7 @@ const JiraAuthScreen: React.FC<Props> = ({ navigation }) => {
       ) : null}
 
       <Button
-        title="Login to Jira"
+        title="Connect with Jira"
         onPress={handleLogin}
         loading={loading}
         variant="primary"
@@ -228,8 +145,8 @@ const JiraAuthScreen: React.FC<Props> = ({ navigation }) => {
       />
 
       <Text style={[styles.footer, { color: colors.textMuted }]}>
-        This is a demo environment. In production, you would use OAuth2 or API
-        tokens.
+        You will be redirected to Atlassian to authenticate via OAuth 2.0. No
+        credentials are stored on this device.
       </Text>
     </ScrollView>
   );
@@ -259,13 +176,6 @@ const styles = StyleSheet.create({
   },
   demoTitle: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
   demoText: { fontSize: 12, lineHeight: 18 },
-  demoBtn: {
-    marginTop: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  demoBtnText: { fontSize: 12, fontWeight: "500" },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",

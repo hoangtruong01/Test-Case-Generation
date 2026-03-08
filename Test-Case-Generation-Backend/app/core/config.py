@@ -1,7 +1,7 @@
 # Configuration management
 from pydantic_settings import BaseSettings
 import os
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 
 
@@ -12,6 +12,20 @@ load_dotenv()
 class Settings(BaseSettings):
     # FastAPI settings
     FASTAPI_SECRET_KEY: Optional[str] = os.getenv("FASTAPI_SECRET_KEY")
+
+    # Frontend / mobile redirect settings
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    MOBILE_SCHEME: str = os.getenv("MOBILE_SCHEME", "testgenai")
+
+    # CORS origins (comma-separated in env)
+    CORS_ORIGINS: List[str] = [
+        o.strip()
+        for o in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://localhost:8081,http://localhost:19006",
+        ).split(",")
+        if o.strip()
+    ]
 
     # LLM settings
     OLLAMA_HOST: str = os.getenv(

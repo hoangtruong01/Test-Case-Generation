@@ -119,7 +119,10 @@ const CollectionPickerScreen: React.FC<Props> = ({ navigation, route }) => {
           </Text>
           <Button
             title="Connect Postman"
-            onPress={() => navigation.navigate("PostmanTab")}
+            onPress={() => {
+              navigation.goBack();
+              navigation.navigate("Dashboard");
+            }}
             variant="outline"
             style={{ marginTop: 16 }}
           />

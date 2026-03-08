@@ -12,8 +12,6 @@ import { useAuthStore } from "../../store/authStore";
 import { Button } from "../../components/ui/Button";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { API_BASE_URL } from "../../config/apiconfig";
-import * as WebBrowser from "expo-web-browser";
 
 type Props = {
   navigation: NativeStackNavigationProp<any>;
@@ -46,17 +44,16 @@ const LandingScreen: React.FC<Props> = ({ navigation }) => {
   const { colors, isDark } = useTheme();
   const { isJiraAuthenticated, isPostmanAuthenticated } = useAuthStore();
 
-  const handleGetStarted = async () => {
+  const handleGetStarted = () => {
     if (isJiraAuthenticated) {
       navigation.navigate("Dashboard");
     } else {
-      // Open Jira OAuth in in-app browser
-      await WebBrowser.openBrowserAsync(`${API_BASE_URL}/jira/login`);
+      navigation.navigate("JiraAuth");
     }
   };
 
-  const handleJiraConnect = async () => {
-    await WebBrowser.openBrowserAsync(`${API_BASE_URL}/jira/login`);
+  const handleJiraConnect = () => {
+    navigation.navigate("JiraAuth");
   };
 
   return (
