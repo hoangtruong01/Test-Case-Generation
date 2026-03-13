@@ -12,9 +12,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTheme } from "../../context/ThemeContext";
 import { useAdminStore } from "../../store/adminStore";
+import { useAuthStore } from "../../store/authStore";
 import { api } from "../../services/api";
 import { Card } from "../../components/ui/Card";
-import { LoadingView, ErrorView } from "../../components/ui/StateViews";
+import { LoadingView, ErrorView, EmptyView } from "../../components/ui/StateViews";
 import { useFocusEffect } from "@react-navigation/native";
 import Toast from "react-native-toast-message";
 
@@ -24,7 +25,8 @@ type Props = {
 
 const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
-  const { stats, setStats } = useAdminStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const { stats, setStats, setSelectedProjectKey } = useAdminStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,8 +62,84 @@ const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
     borderLeftWidth: 3,
   });
 
+  if (!isAuthenticated) {
+    return (
+      <EmptyView
+        icon="shield-outline"
+        title="Admin Access Required"
+        message="Please sign in with an admin account to view and manage system data."
+        actionLabel="Go to Admin Login"
+        onAction={() => navigation.navigate("Login")}
+      />
+    );
+  }
+
   if (loading && !stats) return <LoadingView message="Loading dashboard..." />;
   if (error && !stats) return <ErrorView message={error} onRetry={fetchStats} />;
+
+  const statItems = [
+    {
+      key: "total",
+      label: "Total Users",
+      value: stats?.totalUsers ?? 0,
+      icon: "people-outline" as const,
+      color: colors.primary,
+    },
+    {
+      key: "active",
+      label: "Active Users",
+      value: stats?.activeUsers ?? 0,
+      icon: "checkmark-circle-outline" as const,
+      color: colors.success,
+    },
+    {
+      key: "deleted",
+      label: "Deleted Users",
+      value: stats?.deletedUsers ?? 0,
+      icon: "trash-outline" as const,
+      color: colors.destructive,
+    },
+    {
+      key: "cases",
+      label: "Total Test Cases",
+      value: stats?.totalTestCases ?? 0,
+      icon: "document-text-outline" as const,
+      color: colors.orange,
+    },
+  ];
+
+  const quickActions = [
+    {
+      key: "create-project",
+      label: "Create Project",
+      icon: "add-circle-outline" as const,
+      onPress: () => navigation.navigate("ProjectsTab"),
+    },
+    {
+      key: "add-test-case",
+      label: "Add Test Case",
+      icon: "create-outline" as const,
+      onPress: () => {
+        setSelectedProjectKey(null);
+        navigation.navigate("TestCasesTab");
+      },
+    },
+    {
+      key: "invite-user",
+      label: "Invite User",
+      icon: "person-add-outline" as const,
+      onPress: () => {
+        Toast.show({ type: "info", text1: "Invite flow", text2: "Open Users to add a new member" });
+        navigation.navigate("UsersTab");
+      },
+    },
+    {
+      key: "sync-jira",
+      label: "Sync Jira",
+      icon: "sync-outline" as const,
+      onPress: () => navigation.getParent()?.navigate("AdminJiraTokens" as never),
+    },
+  ];
 
   return (
     <ScrollView
@@ -76,182 +154,120 @@ const AdminDashboardScreen: React.FC<Props> = ({ navigation }) => {
           Admin Dashboard
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          Overview & Management
+          Compact overview for mobile
         </Text>
       </View>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - 2 columns */}
       <View style={styles.statsGrid}>
-        <Card
-          style={statCardStyle(colors.primary)}
-          onPress={() => navigation.navigate("UserManagement")}
-        >
-          <View style={styles.statRow}>
-            <View
-              style={[styles.statIcon, { backgroundColor: colors.primary + "15" }]}
-            >
-              <Ionicons name="people-outline" size={22} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.statNumber, { color: colors.text }]}>
-                {stats?.totalUsers ?? 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Total Users
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </View>
-        </Card>
-
-        <Card style={statCardStyle(colors.success)}>
-          <View style={styles.statRow}>
-            <View
-              style={[styles.statIcon, { backgroundColor: colors.success + "15" }]}
-            >
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={22}
-                color={colors.success}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.statNumber, { color: colors.text }]}>
-                {stats?.activeUsers ?? 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Active Users
-              </Text>
-            </View>
-          </View>
-        </Card>
-
-        <Card style={statCardStyle(colors.destructive)}>
-          <View style={styles.statRow}>
-            <View
-              style={[
-                styles.statIcon,
-                { backgroundColor: colors.destructive + "15" },
-              ]}
-            >
-              <Ionicons
-                name="trash-outline"
-                size={22}
-                color={colors.destructive}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.statNumber, { color: colors.text }]}>
-                {stats?.deletedUsers ?? 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Deleted Users
-              </Text>
-            </View>
-          </View>
-        </Card>
-
-        <Card
-          style={statCardStyle(colors.orange)}
-          onPress={() => navigation.navigate("AdminTestCases", {})}
-        >
-          <View style={styles.statRow}>
-            <View
-              style={[styles.statIcon, { backgroundColor: colors.orange + "15" }]}
-            >
-              <Ionicons
-                name="document-text-outline"
-                size={22}
-                color={colors.orange}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.statNumber, { color: colors.text }]}>
-                {stats?.totalTestCases ?? 0}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-                Total Test Cases
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </View>
-        </Card>
-      </View>
-
-      {/* Test Cases by Project */}
-      {stats?.projectTestCases && stats.projectTestCases.length > 0 && (
-        <Card>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Test Cases by Project
-          </Text>
-          {stats.projectTestCases.map((p, i) => (
-            <TouchableOpacity
-              key={p.projectKey}
-              style={[
-                styles.projectRow,
-                i < stats.projectTestCases.length - 1 && {
-                  borderBottomWidth: 1,
-                  borderBottomColor: colors.border,
-                },
-              ]}
-              onPress={() =>
-                navigation.navigate("AdminTestCases", { projectKey: p.projectKey })
-              }
-              activeOpacity={0.7}
-            >
-              <View style={[styles.projectBadge, { backgroundColor: colors.orange + "15" }]}>
-                <Text style={[styles.projectBadgeText, { color: colors.orange }]}>
-                  {p.projectKey}
+        {statItems.map((item) => (
+          <View key={item.key} style={styles.statGridItem}>
+            <Card style={statCardStyle(item.color)}>
+              <View style={styles.statTopRow}>
+                <View
+                  style={[styles.statIcon, { backgroundColor: item.color + "18" }]}
+                >
+                  <Ionicons name={item.icon} size={16} color={item.color} />
+                </View>
+                <Text style={[styles.statNumber, { color: colors.text }]}>
+                  {item.value}
                 </Text>
               </View>
-              <Text
-                style={[styles.projectName, { color: colors.text }]}
-                numberOfLines={1}
-              >
+              <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
+                {item.label}
+              </Text>
+            </Card>
+          </View>
+        ))}
+      </View>
+
+      {/* Projects */}
+      <Card style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Projects</Text>
+          <TouchableOpacity onPress={() => navigation.navigate("ProjectsTab")}>
+            <Text style={[styles.linkText, { color: colors.primary }]}>View all</Text>
+          </TouchableOpacity>
+        </View>
+
+        {(stats?.projectTestCases || []).slice(0, 6).map((p) => (
+          <TouchableOpacity
+            key={p.projectKey}
+            style={[styles.projectCard, { borderColor: colors.border, backgroundColor: colors.background }]}
+            onPress={() => {
+              setSelectedProjectKey(p.projectKey);
+              navigation.navigate("TestCasesTab");
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.projectName, { color: colors.text }]} numberOfLines={1}>
                 {p.projectName}
               </Text>
-              <View style={[styles.countBadge, { backgroundColor: colors.primary + "15" }]}>
-                <Text style={[styles.countText, { color: colors.primary }]}>
-                  {p.count}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          ))}
-        </Card>
-      )}
-
-      {/* Quick Actions */}
-      <Card>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>
-          Quick Actions
-        </Text>
-        <TouchableOpacity
-          style={styles.actionRow}
-          onPress={() => navigation.navigate("UserManagement")}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="people-outline" size={20} color={colors.primary} />
-          <Text style={[styles.actionLabel, { color: colors.text }]}>
-            Manage Users
-          </Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-        <View style={[styles.divider, { backgroundColor: colors.border }]} />
-        <TouchableOpacity
-          style={styles.actionRow}
-          onPress={() => navigation.navigate("AdminTestCases", {})}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="document-text-outline" size={20} color={colors.orange} />
-          <Text style={[styles.actionLabel, { color: colors.text }]}>
-            View All Test Cases
-          </Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-        </TouchableOpacity>
+              <Text style={[styles.projectKeyText, { color: colors.textMuted }]}>
+                {p.projectKey}
+              </Text>
+            </View>
+            <View
+              style={[styles.projectCountBadge, { backgroundColor: colors.primary + "18" }]}
+            >
+              <Text style={[styles.projectCountText, { color: colors.primary }]}>
+                {p.count}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+          </TouchableOpacity>
+        ))}
       </Card>
 
-      <View style={{ height: 24 }} />
+      {/* Quick Actions */}
+      <Card style={styles.sectionCard}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
+        <View style={styles.quickGrid}>
+          {quickActions.map((action) => (
+            <TouchableOpacity
+              key={action.key}
+              onPress={action.onPress}
+              style={[styles.quickButton, { borderColor: colors.border, backgroundColor: colors.background }]}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={action.icon} size={20} color={colors.primary} />
+              <Text style={[styles.quickLabel, { color: colors.text }]}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Card>
+
+      <Card style={styles.sectionCard}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>More Modules</Text>
+        <View style={styles.quickGrid}>
+          <TouchableOpacity
+            onPress={() => navigation.getParent()?.navigate("AdminTestSuites" as never)}
+            style={[
+              styles.quickButton,
+              { borderColor: colors.border, backgroundColor: colors.background },
+            ]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="albums-outline" size={20} color={colors.primary} />
+            <Text style={[styles.quickLabel, { color: colors.text }]}>Test Suites</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.getParent()?.navigate("AdminJiraTokens" as never)}
+            style={[
+              styles.quickButton,
+              { borderColor: colors.border, backgroundColor: colors.background },
+            ]}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="key-outline" size={20} color={colors.primary} />
+            <Text style={[styles.quickLabel, { color: colors.text }]}>Jira Tokens</Text>
+          </TouchableOpacity>
+        </View>
+      </Card>
+
+      <View style={{ height: 14 }} />
     </ScrollView>
   );
 };
@@ -260,53 +276,85 @@ export default AdminDashboardScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
-  title: { fontSize: 24, fontWeight: "700" },
-  subtitle: { fontSize: 13, marginTop: 4 },
-  statsGrid: { paddingHorizontal: 0 },
-  statCard: { marginHorizontal: 16 },
-  statRow: {
+  header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  title: { fontSize: 26, fontWeight: "700" },
+  subtitle: { fontSize: 12, marginTop: 3 },
+  statsGrid: {
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
+  statGridItem: {
+    width: "48.5%",
+  },
+  statCard: {
+    marginBottom: 10,
+    minHeight: 88,
+  },
+  statTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
   statIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
-  statNumber: { fontSize: 22, fontWeight: "700" },
-  statLabel: { fontSize: 12, marginTop: 2 },
-  sectionTitle: { fontSize: 15, fontWeight: "600", marginBottom: 12 },
-  projectRow: {
+  statNumber: { fontSize: 24, fontWeight: "800" },
+  statLabel: { fontSize: 11, fontWeight: "600" },
+  sectionCard: { marginHorizontal: 16, marginBottom: 10 },
+  sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    gap: 10,
+    justifyContent: "space-between",
+    marginBottom: 10,
   },
-  projectBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  projectBadgeText: { fontSize: 11, fontWeight: "700" },
-  projectName: { flex: 1, fontSize: 14, fontWeight: "500" },
-  countBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  sectionTitle: { fontSize: 15, fontWeight: "700" },
+  linkText: { fontSize: 12, fontWeight: "700" },
+  projectCard: {
+    borderWidth: 1,
     borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  projectName: { fontSize: 13, fontWeight: "700" },
+  projectKeyText: { fontSize: 11, marginTop: 1 },
+  projectCountBadge: {
+    borderRadius: 999,
     minWidth: 28,
     alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  countText: { fontSize: 12, fontWeight: "700" },
-  actionRow: {
+  projectCountText: { fontSize: 11, fontWeight: "700" },
+  quickGrid: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    gap: 12,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
-  actionLabel: { flex: 1, fontSize: 14, fontWeight: "500" },
-  divider: { height: 1, marginVertical: 2 },
+  quickButton: {
+    width: "48.5%",
+    minHeight: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  quickLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });

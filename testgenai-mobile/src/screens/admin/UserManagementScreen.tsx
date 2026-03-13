@@ -12,10 +12,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTheme } from "../../context/ThemeContext";
 import { useAdminStore } from "../../store/adminStore";
+import { useAuthStore } from "../../store/authStore";
 import { api } from "../../services/api";
 import { AdminUser } from "../../types/jira";
 import { Card } from "../../components/ui/Card";
 import { LoadingView, ErrorView, EmptyView } from "../../components/ui/StateViews";
+import { TextInput } from "../../components/ui/TextInput";
 import { useFocusEffect } from "@react-navigation/native";
 import Toast from "react-native-toast-message";
 type Props = {
@@ -24,6 +26,7 @@ type Props = {
 
 const UserManagementScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { users, setUsers } = useAdminStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -129,6 +132,18 @@ const UserManagementScreen: React.FC<Props> = ({ navigation }) => {
 
   const activeCount = users.filter((u) => u.isActive).length;
   const deletedCount = users.filter((u) => !u.isActive).length;
+
+  if (!isAuthenticated) {
+    return (
+      <EmptyView
+        icon="shield-outline"
+        title="Admin Access Required"
+        message="Sign in with an admin account to manage users."
+        actionLabel="Go to Admin Login"
+        onAction={() => navigation.navigate("Login")}
+      />
+    );
+  }
 
   if (loading && users.length === 0) return <LoadingView message="Loading users..." />;
   if (error && users.length === 0) return <ErrorView message={error} onRetry={fetchUsers} />;
@@ -254,6 +269,18 @@ const UserManagementScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
+      <View style={styles.searchWrap}>
+        <TextInput
+          placeholder="Search by name or email"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          leftIcon={
+            <Ionicons name="search-outline" size={18} color={colors.textMuted} />
+          }
+        />
+      </View>
+
       {/* Filter Toggle */}
       <View style={styles.filterRow}>
         <TouchableOpacity
@@ -341,6 +368,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   summaryText: { fontSize: 13, fontWeight: "600" },
+  searchWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
   filterRow: {
     flexDirection: "row",
     gap: 8,

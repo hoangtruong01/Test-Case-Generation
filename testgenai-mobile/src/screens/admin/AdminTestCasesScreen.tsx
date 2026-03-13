@@ -12,6 +12,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RouteProp } from "@react-navigation/native";
 import { useTheme } from "../../context/ThemeContext";
 import { useAdminStore } from "../../store/adminStore";
+import { useAuthStore } from "../../store/authStore";
 import { api } from "../../services/api";
 import { AdminTestCase, Test } from "../../types/jira";
 import { Card } from "../../components/ui/Card";
@@ -20,8 +21,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { RootStackParamList } from "../../navigation/types";
 
 type Props = {
-  navigation: NativeStackNavigationProp<RootStackParamList, "AdminTestCases">;
-  route: RouteProp<RootStackParamList, "AdminTestCases">;
+  navigation?: NativeStackNavigationProp<any>;
+  route?: RouteProp<RootStackParamList, "AdminTestCases">;
 };
 
 type Section = {
@@ -32,13 +33,14 @@ type Section = {
 
 const AdminTestCasesScreen: React.FC<Props> = ({ navigation, route }) => {
   const { colors } = useTheme();
-  const { testCases, setTestCases } = useAdminStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const { testCases, setTestCases, selectedProjectKey, setSelectedProjectKey } = useAdminStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const projectKeyFilter = route.params?.projectKey;
+  const projectKeyFilter = route?.params?.projectKey || selectedProjectKey || undefined;
 
   const fetchTestCases = useCallback(async () => {
     try {
@@ -91,6 +93,18 @@ const AdminTestCasesScreen: React.FC<Props> = ({ navigation, route }) => {
       data,
     }));
   }, [testCases]);
+
+  if (!isAuthenticated) {
+    return (
+      <EmptyView
+        icon="shield-outline"
+        title="Admin Access Required"
+        message="Sign in with an admin account to view generated test cases."
+        actionLabel="Go to Admin Login"
+        onAction={() => navigation?.navigate("Login")}
+      />
+    );
+  }
 
   if (loading && testCases.length === 0)
     return <LoadingView message="Loading test cases..." />;
@@ -265,7 +279,12 @@ const AdminTestCasesScreen: React.FC<Props> = ({ navigation, route }) => {
             Filtered: {projectKeyFilter}
           </Text>
           <TouchableOpacity
-            onPress={() => navigation.setParams({ projectKey: undefined })}
+            onPress={() => {
+              if (route?.params?.projectKey) {
+                navigation?.setParams({ projectKey: undefined });
+              }
+              setSelectedProjectKey(null);
+            }}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="close-circle" size={18} color={colors.textMuted} />
