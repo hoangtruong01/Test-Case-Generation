@@ -11,6 +11,7 @@ class GenericResponse(BaseModel):
 
 class AdminAuthResponse(BaseModel):
     redirect_url: str
+    token: Optional[str] = None
 
 
 class AdminAuthRequest(BaseModel):

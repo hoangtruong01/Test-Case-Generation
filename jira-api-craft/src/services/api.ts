@@ -56,7 +56,7 @@ export const api = {
         body: JSON.stringify({ api_key: apiKey }),
       });
 
-      if (response ) {
+      if (response) {
         // Save token to localStorage for subsequent requests
         localStorage.setItem("postman_apikey", apiKey);
         api.getPostmanCollections(); // prefetch collections after login
@@ -70,7 +70,7 @@ export const api = {
   },
 
   async getPostmanCollections(): Promise<{ collections: Array<{ id: string; name: string; createdAt?: string }> } | { error: string }> {
-     
+
     try {
       const session = localStorage.getItem("jira_session");
       if (!session) {
@@ -104,7 +104,7 @@ export const api = {
 
   async getPostmanCollection(collectionId: string, apiKey?: string): Promise<{ collection: Record<string, unknown> } | { error: string }> {
     if (!collectionId) return { error: "collectionId is required" };
-    const key = apiKey  || (typeof window !== 'undefined' ? localStorage.getItem('postman_apikey') : null);
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('postman_apikey') : null);
     if (!key) return { error: "API key required" };
 
     try {
@@ -207,7 +207,7 @@ export const api = {
 
   async getIssues(project: string): Promise<JiraIssue[]> {
     // Require session token and projectKey to fetch issues from backend
-    const session =localStorage.getItem("jira_session");
+    const session = localStorage.getItem("jira_session");
     if (!session) {
       throw new Error("Please authenticate with Jira first (session token required)");
     }
@@ -246,7 +246,7 @@ export const api = {
               priority,
               issuekey: key,
             },
-          } ;
+          };
         });
 
         return mapped as unknown as JiraIssue[];
@@ -265,12 +265,12 @@ export const api = {
     if (!collectionId) {
       throw new Error("collectionId is required to generate test cases");
     }
-    const session = localStorage.getItem("jira_session") ;
+    const session = localStorage.getItem("jira_session");
     if (session) {
       try {
         const body = {
           issue_descriptions: issueDescriptions,
-          think : false
+          think: false
         };
 
         const response = await apiCall(`/testcases?collectionId=${encodeURIComponent(collectionId)}`, {
@@ -288,6 +288,33 @@ export const api = {
       }
     } else {
       throw new Error("Please authenticate with Jira first (session token required)");
+    }
+  },
+
+  async getPostmanRequests(collectionId: string): Promise<{ requests: Array<Record<string, unknown>> } | { error: string }> {
+    if (!collectionId) return { error: "collectionId is required" };
+
+    const session = localStorage.getItem("jira_session");
+    if (!session) {
+      return { error: "Please authenticate with Jira first (session token required)" };
+    }
+
+    try {
+      const response = await apiCall(`/postman/requests?collectionId=${encodeURIComponent(collectionId)}`, {
+        method: "GET",
+        headers: {
+          "x-session-token": session,
+        },
+      });
+
+      const raw = Array.isArray(response) ? response : (response.requests && Array.isArray(response.requests) ? response.requests : null);
+      if (raw) {
+        return { requests: raw };
+      }
+      return { requests: response ? [response] : [] };
+    } catch (err) {
+      console.error("getPostmanRequests failed", err);
+      return { error: err instanceof Error ? err.message : "Failed to fetch requests" };
     }
   },
 

@@ -7,10 +7,17 @@ export type RootStackParamList = {
   Issues: { projectKey: string };
   CollectionDetail: { collectionId: string };
   CollectionPicker: { issueDescriptions: string[] };
+  UserManagement: undefined;
+  AdminProjects: undefined;
+  AdminTestSuites: undefined;
+  AdminTestCases: { projectKey?: string };
+  AdminJiraTokens: undefined;
 };
 
 export type TabParamList = {
+  DashboardTab: undefined;
   ProjectsTab: undefined;
-  PostmanTab: undefined;
+  TestCasesTab: undefined;
+  UsersTab: undefined;
   SettingsTab: undefined;
 };

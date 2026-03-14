@@ -1,8 +1,11 @@
 import redis.asyncio as redis
 import json
+import logging
 from typing import Optional, Any
 from pydantic import BaseModel
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Shared asynchronous Redis client configured via application settings
 redis_client = redis.Redis(
@@ -10,9 +13,11 @@ redis_client = redis.Redis(
     port=settings.REDIS_PORT,
     password=settings.REDIS_PASSWORD,
     decode_responses=True,
-    # ssl=True
+    socket_connect_timeout=1, # Fast fail if not running
 )
 
+# In-memory fallback for when Redis is dead
+_memory_cache = {}
 
 async def redis_healthcheck() -> None:
     """
@@ -33,33 +38,18 @@ async def redis_healthcheck() -> None:
 
 
 async def cache_get(key: str):
-    """
-    Retrieve and deserialize a cached value by key.
-
-    This function checks if a key exists in Redis, and if it does,
-    it retrieves the value associated with that key and deserializes
-    it into a Python object.
-
-    If the key does not exist, or if an exception occurs during
-    retrieval, this function raises an exception.
-
-    :param key: The key to retrieve the value for.
-    :return: The deserialized value associated with the key, or None if
-        the key does not exist.
-    :raises Exception: If an exception occurs during retrieval.
-    """
-
-    # Retrieve and deserialize a cached value by key
     try:
-        if not await redis_client.exists(key):
-            return None
-
-        result = await redis_client.get(name=key)
+        if await redis_client.exists(key):
+            result = await redis_client.get(name=key)
+            return json.loads(result)
     except Exception as e:
-        raise Exception(f"Redis Get Failed: {e}")
-
-    return json.loads(result)
-
+        logger.warning(f"Redis get failed ({e}), falling back to memory.")
+    
+    # Fallback to in-memory
+    result = _memory_cache.get(key)
+    if result:
+        return json.loads(result)
+    return None
 
 async def cache_set(
         key: str,
@@ -67,32 +57,19 @@ async def cache_set(
         expire_at: Optional[int] = None,
         expire_in: Optional[int] = None
 ) -> None:
-    """
-    Store a JSON-serializable value in Redis with optional expiration.
+    if isinstance(value, BaseModel):
+        value = value.model_dump()
+    
+    val_json = json.dumps(value)
 
-    This function sets a value in Redis with an optional expiration time.
-
-    :param key: The key to store the value under.
-    :param value: The JSON-serializable value to store in Redis.
-    :param expire_at: The absolute Unix timestamp at which the key should expire.
-    :param expire_in: The number of seconds from now at which the key should expire.
-
-    :raises Exception: If an exception occurs during storage.
-    """
-
-    # Store a JSON-serializable value in Redis with optional expiration
+    # Try Redis
     try:
-        if isinstance(value, BaseModel):
-            value = value.model_dump()
-
-        await redis_client.set(key, json.dumps(value), keepttl=True)
-
+        await redis_client.set(key, val_json, keepttl=True)
         if expire_at is not None:
             await redis_client.expireat(name=key, when=expire_at)
-
         if expire_in is not None:
             await redis_client.expire(name=key, time=expire_in)
-
+        return
     except Exception as e:
         raise Exception(f"Redis Set Failed: {e}")
 

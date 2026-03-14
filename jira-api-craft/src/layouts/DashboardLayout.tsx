@@ -13,13 +13,19 @@ import {
   Menu,
   X,
   Zap,
-  LayoutGrid,
+  ShieldCheck,
+  Users,
+  Key,
+  FlaskConical,
+  TestTubes,
+  ChevronDown,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { to: "/dashboard/projects", label: "Projects", icon: FolderKanban },
   { to: "/dashboard/postman", label: "Postman", icon: Send },
+  { to: "/dashboard/endpoints", label: "Endpoints", icon: Webhook },
   { to: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -51,9 +57,8 @@ const DashboardLayout = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-card border-r border-border flex flex-col transition-transform duration-300 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }`}
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-card border-r border-border flex flex-col transition-transform duration-300 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          }`}
       >
         {/* Logo */}
         <div className="h-16 flex items-center gap-2 px-6 border-b border-border">
@@ -77,10 +82,9 @@ const DashboardLayout = () => {
               to={item.to}
               onClick={() => setSidebarOpen(false)}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`
               }
             >
@@ -97,8 +101,8 @@ const DashboardLayout = () => {
               {user?.name?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user?.name }</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email }</p>
+              <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
             </div>
           </div>
         </div>

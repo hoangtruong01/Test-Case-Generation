@@ -16,6 +16,11 @@ import DashboardTabs from "./DashboardTabs";
 import IssuesScreen from "../screens/dashboard/IssuesScreen";
 import CollectionDetailScreen from "../screens/postman/CollectionDetailScreen";
 import CollectionPickerScreen from "../screens/postman/CollectionPickerScreen";
+import UserManagementScreen from "../screens/admin/UserManagementScreen";
+import AdminTestCasesScreen from "../screens/admin/AdminTestCasesScreen";
+import AdminProjectsScreen from "../screens/admin/AdminProjectsScreen";
+import AdminTestSuitesScreen from "../screens/admin/AdminTestSuitesScreen";
+import AdminJiraTokensScreen from "../screens/admin/AdminJiraTokensScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -112,6 +117,46 @@ const RootNavigator: React.FC = () => {
           options={{
             title: "Select Collection",
             presentation: "modal",
+          }}
+        />
+        <Stack.Screen
+          name="UserManagement"
+          component={UserManagementScreen}
+          options={{
+            title: "User Management",
+            headerBackTitle: "Back",
+          }}
+        />
+        <Stack.Screen
+          name="AdminProjects"
+          component={AdminProjectsScreen}
+          options={{
+            title: "Projects",
+            headerBackTitle: "Back",
+          }}
+        />
+        <Stack.Screen
+          name="AdminTestSuites"
+          component={AdminTestSuitesScreen}
+          options={{
+            title: "Test Suites",
+            headerBackTitle: "Back",
+          }}
+        />
+        <Stack.Screen
+          name="AdminTestCases"
+          component={AdminTestCasesScreen}
+          options={{
+            title: "Test Cases",
+            headerBackTitle: "Back",
+          }}
+        />
+        <Stack.Screen
+          name="AdminJiraTokens"
+          component={AdminJiraTokensScreen}
+          options={{
+            title: "Jira Tokens",
+            headerBackTitle: "Back",
           }}
         />
       </Stack.Navigator>

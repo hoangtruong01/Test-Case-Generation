@@ -70,3 +70,32 @@ export interface Test {
   url?: string;
   method?: string;
 }
+
+// ==================== ADMIN ====================
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface AdminStats {
+  totalUsers: number;
+  activeUsers: number;
+  deletedUsers: number;
+  totalTestCases: number;
+  projectTestCases: { projectKey: string; projectName: string; count: number }[];
+}
+
+export interface AdminTestCase {
+  id: string;
+  projectKey: string;
+  projectName: string;
+  issueKey: string;
+  requirement?: string;
+  tests: Test[];
+  createdAt: string;
+}
