@@ -43,9 +43,7 @@ def upsert_requirements(doc_id: str, text: str, metadata: dict | None = None):
         ids=[doc_id],
         embeddings=[vector],
         metadatas=[metadata or {}],
-        documents=[text],
-        images=[],
-        uris=None
+        documents=[text]
     )
 
 

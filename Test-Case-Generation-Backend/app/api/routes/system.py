@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 from app.core.database import database_healthcheck
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
 from app.core.llm import ollama_healthcheck
 from app.core.vector_database import chromadb_healthcheck
 from chromadb.errors import ChromaError
@@ -47,30 +46,26 @@ async def status():
 
     try:
         await database_healthcheck()
-    except SQLAlchemyError as e:
+    except Exception as e:
         traceback.print_exc()
-        RuntimeError("Database healthcheck failed:", e)
         db_ok = False
 
     try:
         await ollama_healthcheck()
     except Exception as e:
         traceback.print_exc()
-        RuntimeError("LLM healthcheck failed:", e)
         llm_ok = False
 
     try:
         chromadb_healthcheck()
     except ChromaError as e:
         traceback.print_exc()
-        RuntimeError("ChromaDB healthcheck failed:", e)
         vector_ok = False
 
     try:
         await redis_healthcheck()
     except Exception as e:
         traceback.print_exc()
-        RuntimeError("Redis healthcheck failed:", e)
         cache_ok = False
 
     if not db_ok or not llm_ok or not vector_ok or not cache_ok:

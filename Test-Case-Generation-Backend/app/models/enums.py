@@ -13,10 +13,18 @@ class OllamaChatResponsePropertiesType(Enum):
 
 
 class OllamaChatResponsePropertiesPriority(Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
+    LOW = "Low"
+    MEDIUM = "Medium"
+    HIGH = "High"
+    CRITICAL = "Critical"
+
+
+class TestCaseStatus(Enum):
+    PENDING = "Pending"
+    PASS = "Pass"
+    FAIL = "Fail"
+    BLOCKED = "Blocked"
+    SKIPPED = "Skipped"
 
 
 class PostmanAgentFrameworks(Enum):

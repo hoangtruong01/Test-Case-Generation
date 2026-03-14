@@ -1,6 +1,7 @@
 # Configuration management
 from pydantic_settings import BaseSettings
 import os
+import secrets
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -11,7 +12,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     # FastAPI settings
-    FASTAPI_SECRET_KEY: Optional[str] = os.getenv("FASTAPI_SECRET_KEY")
+    FASTAPI_SECRET_KEY: str = os.getenv("FASTAPI_SECRET_KEY") or secrets.token_hex(32)
     ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "123")
 
@@ -27,7 +28,8 @@ class Settings(BaseSettings):
         "CUSTOM_LLM_MODEL", 'swd-model:latest')
 
     # Database settings
-    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
+    SUPABASE_URL: Optional[str] = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY: Optional[str] = os.getenv("SUPABASE_KEY")
 
     # Cache settings
     REDIS_USERNAME: Optional[str] = os.getenv("REDIS_USERNAME")

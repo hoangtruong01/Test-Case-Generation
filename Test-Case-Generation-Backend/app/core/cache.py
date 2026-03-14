@@ -20,12 +20,21 @@ redis_client = redis.Redis(
 _memory_cache = {}
 
 async def redis_healthcheck() -> None:
-    try:
-        if await redis_client.ping():
-            return
-    except Exception:
-        pass
-    logger.warning("Redis connection not established. Using in-memory fallback.")
+    """
+    Perform a basic connectivity check against the Redis server.
+
+    This function checks the health of the Redis server by pinging it
+    and then closing the connection if the ping is successful.
+
+    Raises an exception if the Redis connection is not established.
+    """
+
+    # Perform a basic connectivity check against the Redis server
+    if await redis_client.ping():
+        await redis_client.aclose()
+        return
+
+    raise Exception("Redis connection not established.")
 
 
 async def cache_get(key: str):
@@ -62,9 +71,21 @@ async def cache_set(
             await redis_client.expire(name=key, time=expire_in)
         return
     except Exception as e:
-        logger.warning(f"Redis set failed ({e}), falling back to memory.")
-
-    # Fallback to in-memory
-    _memory_cache[key] = val_json
+        raise Exception(f"Redis Set Failed: {e}")
 
 
+async def cache_increment(key: str, expire_in: int) -> int:
+    """
+    Atomically increment a counter in Redis, setting expiry on first creation.
+
+    :param key: The Redis key to increment.
+    :param expire_in: TTL in seconds applied only when the key is first created.
+    :return: The new counter value after increment.
+    """
+    try:
+        count = await redis_client.incr(key)
+        if count == 1:
+            await redis_client.expire(key, expire_in)
+        return count
+    except Exception as e:
+        raise Exception(f"Redis Increment Failed: {e}")

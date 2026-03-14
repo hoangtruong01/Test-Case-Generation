@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends
-from app.services.jira import get_all_jira_projects, get_all_jira_issues
+from app.services.jira import get_all_jira_projects, get_all_jira_issues, get_jira_user_info, get_access_token
 from app.services.auth import verify_jira_session
 from fastapi.responses import JSONResponse
 from app.models.schemas import GenericResponse
 from fastapi import Query
 from typing import List
-from app.models.jira import AllJiraIssuesResponse, JiraProject
+from app.models.jira import JiraProject, AllJiraIssuesResponse
 
 
 router = APIRouter()
@@ -21,8 +21,8 @@ router = APIRouter()
     methods=["GET"],
     response_class=JSONResponse
 )
-async def get_jira_projects(session=Depends(verify_jira_session)):
-    return await get_all_jira_projects(session)
+async def jira_projects(session=Depends(verify_jira_session)):
+    return await get_all_jira_projects(session.get("jira"))
 
 
 @router.api_route(
@@ -36,7 +36,7 @@ async def get_jira_projects(session=Depends(verify_jira_session)):
     methods=["GET"],
     response_class=JSONResponse
 )
-async def get_jira_issues(
+async def jira_issues(
     project: str = Query(
         description="Jira project name",
         strict=True
@@ -44,4 +44,22 @@ async def get_jira_issues(
     session=Depends(verify_jira_session)
 ):
 
-    return await get_all_jira_issues(project_name=project, key=session)
+    return await get_all_jira_issues(project_name=project, key=session.get("jira"))
+
+
+@router.api_route(
+    path="/info",
+    summary="Get current Jira user info",
+    description="Returns the authenticated Jira user's profile information",
+    responses={
+        200: {"description": "User info successfully retrieved"},
+        401: {"model": GenericResponse, "description": "Jira user not authenticated"},
+    },
+    methods=["GET"],
+    response_class=JSONResponse
+)
+async def info(
+    session=Depends(verify_jira_session)
+):
+    access_token = await get_access_token(session.get("jira"))
+    return await get_jira_user_info(access_token)

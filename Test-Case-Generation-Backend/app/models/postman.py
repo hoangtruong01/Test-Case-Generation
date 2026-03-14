@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
-from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Optional, Dict, Any
 from app.models.enums import PostmanAgentFrameworks, PostmanLanguages
 
 
@@ -18,11 +16,13 @@ class PostmanCollectionShort(BaseModel):
 class PostmanCollectionFullInfo(BaseModel):
     _postman_id: str
     name: str
-    schema: str
+    schema_url: str = Field(alias="schema")
     createdAt: str
     updatedAt: str
     lastUpdatedBy: str
     uid: str
+
+    model_config = {"populate_by_name": True}
 
 
 class PostmanCollectionItemProtocolProfileBehavior(BaseModel):

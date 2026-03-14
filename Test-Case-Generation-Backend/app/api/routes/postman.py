@@ -57,7 +57,6 @@ async def collection(
     summary="Generate test script by specific request ID and collection ID",
     description="",
     responses={200: {"description": "Successfully generated"}},
-    deprecated=True,
     methods=["POST"],
     response_class=JSONResponse,
 )
@@ -82,7 +81,6 @@ async def testscript(request: PostmanTestScriptRequest, session: str = Depends(v
     summary="Generate all test script for all requests of a collection",
     description="",
     responses={200: {"description": "Successfully generated"}},
-    deprecated=True,
     methods=["POST"],
     response_class=JSONResponse,
 )

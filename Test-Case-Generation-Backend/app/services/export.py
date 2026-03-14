@@ -2,17 +2,16 @@ from io import BytesIO
 import xlsxwriter
 from typing import Dict, Any
 
-# Output Excel filename for the user to download
 EXCEL_FILENAME = "testcases.xlsx"
-# Worksheet name inside the Excel file
 EXCEL_WORKSHEET_NAME = "Testcases"
 
-# Styling
 EXCEL_HEADER_FORMAT = {
     "bold": True,
     "border": 1,
     "align": "center",
-    "valign": "middle"
+    "valign": "middle",
+    "bg_color": "#D9E1F2",
+    "text_wrap": True,
 }
 EXCEL_CELL_FORMAT = {
     "text_wrap": True,
@@ -21,109 +20,91 @@ EXCEL_CELL_FORMAT = {
 }
 
 
-# Returns the configured Excel filename
 async def get_filename() -> str:
-    """Returns the configured Excel filename.
-
-    Returns:
-        str: The configured Excel filename.
-    """
     return EXCEL_FILENAME
 
 
-# This function is vibe coded, has been tested but not reviewed
-# TODO: Recheck the code and optmize/improve is possible
-# Generates an Excel file from a structured test case payload and returns it as an in-memory buffer
 async def generate_excel(payload: Dict[str, Any]) -> BytesIO:
-    """Generate an Excel file from a structured test case payload and returns it as an in-memory buffer.
+    """
+    Generate an Excel file from a testsuite payload and return it as an in-memory buffer.
 
     Args:
-        payload (Dict[str, Any]): A structured test case payload following the OllamaChatResponse schema containing a list of testcases.
+        payload (Dict[str, Any]): Dict with a "testcases" key containing a list of TestCase dicts.
 
     Returns:
-        BytesIO: An in-memory buffer containing the generated Excel file.
+        BytesIO: In-memory buffer of the generated Excel file.
     """
-
-    # In-memory buffer to avoid filesystem I/O
     buffer = BytesIO()
-
-    # Create workbook in memory for efficient async-friendly usage
     workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
     worksheet = workbook.add_worksheet(EXCEL_WORKSHEET_NAME)
 
-    # Compile reusable formats once per workbook
     header_fmt = workbook.add_format(EXCEL_HEADER_FORMAT)
     cell_fmt = workbook.add_format(EXCEL_CELL_FORMAT)
 
-    # Static column headers defining the testcase schema
     headers = [
-        "ID",
+        "Test Case ID",
         "Title",
-        "Type",
         "Priority",
-        "Preconditions",
-        "Steps",
-        "Expected Result"
+        "Module",
+        "Description",
+        "Pre-Conditions",
+        "Test Steps",
+        "Expected Result",
+        "Post-Conditions",
+        "Status",
     ]
 
-    # Write header row at the top of the worksheet
     worksheet.write_row(0, 0, headers, header_fmt)
+    worksheet.set_row(0, 30)
 
-    # Start writing data rows immediately after the header
     row = 1
-
-    # Iterate over testcase entries in the payload
     for tc in payload.get("testcases", []):
-        # Join preconditions into a multi-line cell
-        preconditions_list = tc.get("preconditions") or []
-        preconditions = "\n".join(preconditions_list)
+        # Pre-conditions
+        pre = "\n".join(tc.get("pre_conditions") or [])
 
-        # Build a readable, paragraph-style representation of steps
-        steps_paragraph = []
-        for step in tc.get("steps", []):
-            # Flatten input_data dictionary into a single line
-            input_dict = step.get("input_data") or {}
-            input_data = ", ".join(f"{k}: {v}" for k, v in input_dict.items())
+        # Test steps — each step on its own block
+        steps_lines = []
+        for s in tc.get("test_steps") or []:
+            line = f"Step {s.get('step_number')}: {s.get('action')}"
+            if s.get("test_data"):
+                line += f"\n  Data: {s.get('test_data')}"
+            steps_lines.append(line)
+        steps_text = "\n\n".join(steps_lines)
 
-            # Each step is rendered as a small formatted block
-            steps_paragraph.append(
-                f"Step {step.get('step')}:\n"
-                f"Input: {input_data}\n"
-                f"Action: {step.get('action')}"
-            )
+        # Post-conditions
+        post = "\n".join(tc.get("post_conditions") or [])
 
-        # Separate steps with spacing for readability in Excel
-        steps_text = "\n\n".join(steps_paragraph)
+        worksheet.write_row(row, 0, [
+            tc.get("test_case_id", ""),
+            tc.get("title", ""),
+            tc.get("priority", ""),
+            tc.get("module", ""),
+            tc.get("description", ""),
+            pre,
+            steps_text,
+            tc.get("expected_result", ""),
+            post,
+            tc.get("status", "Pending"),
+        ], cell_fmt)
 
-        # Join expected results into a multi-line cell
-        expected = "\n".join(tc.get("expected_result", []))
-
-        # Write the complete testcase row
-        worksheet.write_row(
-            row,
-            0,
-            [
-                tc.get("id", ""),
-                tc.get("title", ""),
-                tc.get("type", ""),
-                tc.get("priority", ""),
-                preconditions,
-                steps_text,
-                expected,
-            ],
-            cell_fmt
-        )
+        # Auto-height hint — set row height proportional to step count
+        step_count = len(tc.get("test_steps") or [])
+        worksheet.set_row(row, max(20, step_count * 30))
 
         row += 1
 
-    # Apply fixed column widths for consistent layout and readability
-    worksheet.set_column(0, 0, 12)   # ID
+    # Column widths
+    worksheet.set_column(0, 0, 14)   # Test Case ID
     worksheet.set_column(1, 1, 35)   # Title
-    worksheet.set_column(2, 3, 14)   # Type, Priority
-    worksheet.set_column(4, 6, 45)   # Preconditions, Steps, Expected Result
+    worksheet.set_column(2, 2, 12)   # Priority
+    worksheet.set_column(3, 3, 18)   # Module
+    worksheet.set_column(4, 4, 40)   # Description
+    worksheet.set_column(5, 5, 40)   # Pre-Conditions
+    worksheet.set_column(6, 6, 55)   # Test Steps
+    worksheet.set_column(7, 7, 45)   # Expected Result
+    worksheet.set_column(8, 8, 40)   # Post-Conditions
+    worksheet.set_column(9, 9, 12)   # Status
 
-    # Finalize workbook and reset buffer cursor for reading
     workbook.close()
     buffer.seek(0)
-
     return buffer

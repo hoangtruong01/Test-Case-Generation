@@ -1,35 +1,66 @@
-from app.core.llm import local_llm_chat
+from app.core.llm import local_llm_chat_testcases
 from app.models.ollama import OllamaChatRequest
 from app.utils.utils import format_issue_descriptions
-from app.core.postman import create_request
-import json
-from typing import Optional, Dict, Any
+from app.core.database import get_client
+from typing import List, Dict, Any
 
 
-async def generate_tests(collectionId: str, request: OllamaChatRequest, key: str) -> Optional[Dict[str, Any]]:
-    # TODO - Add if not provided a collectionId, create a new one
+async def generate_tests(
+    jira_project_name: str,
+    request: OllamaChatRequest,
+    session: dict
+) -> List[Dict[str, Any]]:
     """
-    Generates system-level testcases from a structured Jira issue description using a local OLLAMA server.
+    Generates testcases from Jira issue descriptions using a local LLM,
+    persists them to Supabase under the authenticated user, and returns the result.
 
     Args:
-        request (OllamaChatRequest): A structured request containing a list of Jira issue descriptions to be analyzed.
+        jira_project_name (str): The Jira project name to associate with the testcases.
+        request (OllamaChatRequest): Contains issue descriptions and think flag.
+        session (dict): The verified Jira session token dict from verify_jira_session.
 
     Returns:
-        Optional[Dict[str, Any]]: A JSON-compatible dictionary containing the LLM-generated system-level testcases if successful, or None if no valid output is produced.
+        List[Dict[str, Any]]: The generated testcases as a list of dicts.
     """
 
-    # Normalize and aggregate issue descriptions into LLM-ready requirements
     formatted_requirements = await format_issue_descriptions(request.issue_descriptions)
 
-    # Invoke the local LLM to generate system-level testcases
-    content = await local_llm_chat(
+    result = await local_llm_chat_testcases(
         prompt=formatted_requirements,
         think=request.think
     )
 
-    for req in content:
-        payload = req.model_dump(mode="json")
-        await create_request(collection_id=collectionId, payload=payload, key=key)
+    testcases = [tc.model_dump(mode="json") for tc in result.testcases]
 
-    # Explicitly return None when no valid LLM output is produced
-    return
+    username = session.get("username") if isinstance(session, dict) else None
+
+    db = await get_client()
+
+    # Check if a row already exists for this user + project combination
+    existing = await (
+        db.table("testcase")
+        .select("id, testsuite")
+        .eq("user", username)
+        .eq("jira_project_name", jira_project_name)
+        .maybe_single()
+        .execute()
+    )
+
+    if existing and existing.data:
+        # Append new testcases to the existing testsuite
+        current = existing.data.get("testsuite") or []
+        await (
+            db.table("testcase")
+            .update({"testsuite": current + testcases})
+            .eq("id", existing.data["id"])
+            .execute()
+        )
+    else:
+        # New user + project combination — insert a fresh row
+        await db.table("testcase").insert({
+            "user": username,
+            "jira_project_name": jira_project_name,
+            "testsuite": testcases
+        }).execute()
+
+    return testcases

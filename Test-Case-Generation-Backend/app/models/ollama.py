@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, List, Any
-from app.models.enums import OllamaChatResponsePropertiesType, OllamaChatResponsePropertiesPriority
+from app.models.enums import OllamaChatResponsePropertiesType, OllamaChatResponsePropertiesPriority, TestCaseStatus
 
 # ==============================OLLAMA LIST==============================================
 
@@ -24,27 +24,47 @@ class OllamaModel(BaseModel):
 # ==============================OLLAMA CHAT==============================================
 
 
-class OllamaChatResponsePropertiesSteps(BaseModel):
-    step: int
-    input_data: Optional[Dict[str, Any]]
+class TestCaseStep(BaseModel):
+    step_number: int
     action: str
+    test_data: Optional[str] = None
 
 
-class OllamaChatResponseProperties(BaseModel):
-    id: str
+class TestCaseMetadata(BaseModel):
+    created_by: str
+    created_date: str
+    environment: str
+
+
+class TestCase(BaseModel):
+    test_case_id: str
     title: str
-    type: Optional[OllamaChatResponsePropertiesType]
-    priority: Optional[OllamaChatResponsePropertiesPriority]
-    preconditions: Optional[List[str]]
-    steps: List[OllamaChatResponsePropertiesSteps]
-    expected_result: List[str]
+    priority: Optional[OllamaChatResponsePropertiesPriority] = None
+    module: Optional[str] = None
+    description: Optional[str] = None
+    pre_conditions: Optional[List[str]] = None
+    test_steps: List[TestCaseStep]
+    expected_result: str
+    actual_result: Optional[str] = ""
+    status: TestCaseStatus = TestCaseStatus.PENDING
+    post_conditions: Optional[List[str]] = None
+    metadata: Optional[TestCaseMetadata] = None
 
 
 class OllamaChatResponse(BaseModel):
-    # id: str
-    testcases: List[OllamaChatResponseProperties]
+    testcases: List[TestCase]
 
 
 class OllamaChatRequest(BaseModel):
     issue_descriptions: List[str]
     think: Optional[bool] = False
+
+    @field_validator("issue_descriptions")
+    @classmethod
+    def validate_issue_descriptions(cls, v: List[str]) -> List[str]:
+        if len(v) > 50:
+            raise ValueError("issue_descriptions cannot exceed 50 items")
+        for desc in v:
+            if len(desc) > 5000:
+                raise ValueError("Each issue description cannot exceed 5000 characters")
+        return v

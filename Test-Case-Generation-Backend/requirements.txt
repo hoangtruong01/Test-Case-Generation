@@ -10,10 +10,7 @@ httpx
 ollama
 
 # Database
-sqlalchemy
-sqlalchemy_utils
-sqlalchemy[asyncio]
-asyncpg
+supabase
 
 # Memory
 redis[hiredis]

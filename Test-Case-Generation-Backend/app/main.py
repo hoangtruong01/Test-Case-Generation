@@ -11,12 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize external dependencies during application startup
-    try:
-        await ollama_init()
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Ollama init skipped: {e}")
+    await ollama_init()
     yield
 
 
@@ -62,7 +57,7 @@ app.include_router(auth.router, tags=["Authentication and Authorization"])
 app.include_router(llm.router, tags=["LLM"])
 
 # Testcase export endpoints
-app.include_router(export.router, tags=["Export"], deprecated=True)
+app.include_router(export.router, tags=["Export"])
 
 app.include_router(postman.router, tags=["Postman"], prefix="/postman")
 

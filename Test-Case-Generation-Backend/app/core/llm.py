@@ -5,7 +5,7 @@ from typing import List, Optional
 import httpx
 import traceback
 from app.models.postman import PostmanRequest
-from typing import List
+from app.models.ollama import OllamaChatResponse, TestCase
 from pydantic import TypeAdapter
 
 # System prompt injected into the custom Ollama model to constrain behavior
@@ -78,6 +78,55 @@ STRICT BEHAVIORAL RULES:
 - Do not generate metadata.
 - Do not describe your reasoning.
 - Do not output anything outside the JSON array.
+
+The output must be directly validatable against the provided JSON schema without modification.
+"""
+
+TESTCASE_SYSTEM_PROMPT = """
+You are a software QA assistant.
+
+Your task is to generate structured test cases that strictly conform to the provided JSON schema for an OllamaChatResponse object.
+
+CRITICAL OUTPUT RULES:
+
+- Output MUST be valid JSON.
+- The top-level output MUST be a JSON object with a single key: "testcases".
+- "testcases" MUST be a JSON array.
+- Each element MUST strictly match the TestCase schema below.
+- Do NOT include explanations, comments, markdown, or code fences.
+- Do NOT include fields not defined in the schema.
+- Do NOT omit required fields.
+- If an optional field is not applicable, set it to null.
+
+SCHEMA CONSTRAINTS:
+
+Each TestCase object MUST contain:
+- test_case_id: string (unique, e.g. "TC_001")
+- title: string (short descriptive title)
+- priority: one of "Low" | "Medium" | "High" | "Critical" | null
+- module: string describing the feature area, or null
+- description: string explaining what is being tested, or null
+- pre_conditions: array of strings describing required setup, or null
+- test_steps: array of objects, each containing:
+    - step_number: integer (1-based)
+    - action: string describing what the tester does
+    - test_data: string with input data for this step, or null
+- expected_result: string describing the expected outcome
+- actual_result: empty string ""
+- status: "Pending"
+- post_conditions: array of strings describing state after test, or null
+- metadata: object containing:
+    - created_by: "QA_Team"
+    - created_date: today's date in "YYYY-MM-DD" format
+    - environment: "Staging"
+
+STRICT BEHAVIORAL RULES:
+
+- Derive test cases only from the provided requirements.
+- Do not invent functionality not described in the requirements.
+- Cover both happy path and edge cases where applicable.
+- Do not describe your reasoning.
+- Do not output anything outside the JSON object.
 
 The output must be directly validatable against the provided JSON schema without modification.
 """
@@ -221,11 +270,52 @@ async def local_llm_chat(prompt: List[str], think: Optional[bool]) -> List[Postm
     )
 
     # Fail fast if the LLM returns no response
-    if response is None:
+    if response is None or not response.message or not response.message.content:
         raise ValueError("No Local LLM Response from Core LLM")
 
-    if response and response.message and response.message.content:
-        requests_list = schema.validate_json(response.message.content)
+    requests_list = schema.validate_json(response.message.content)
 
     # Return structured response
     return requests_list
+
+
+async def local_llm_chat_testcases(prompt: List[str], think: Optional[bool]) -> OllamaChatResponse:
+    """
+    Interact with the local Ollama server to generate structured QA test cases
+    from provided requirements.
+
+    Args:
+        prompt (List[str]): A list of software requirement strings to analyze.
+        think (Optional[bool]): Whether to enable the model's reasoning mode.
+
+    Returns:
+        OllamaChatResponse: Validated response containing a list of test cases.
+
+    Raises:
+        ValueError: If the local LLM returns no response or empty content.
+    """
+
+    schema = TypeAdapter(OllamaChatResponse)
+
+    response = await ollama_client.chat(
+        model=await get_ollama_model(),
+        messages=[
+            {
+                "role": "system",
+                "content": TESTCASE_SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": f"Requirements: \n{prompt}"
+            }
+        ],
+        tools=None,
+        stream=False,
+        think=think,
+        format=schema.json_schema()
+    )
+
+    if not response or not response.message or not response.message.content:
+        raise ValueError("No Local LLM Response from Core LLM")
+
+    return schema.validate_json(response.message.content)

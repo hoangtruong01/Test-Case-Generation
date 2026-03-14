@@ -1,152 +1,93 @@
 from fastapi import APIRouter, Depends
-from app.models.schemas import AdminAuthRequest, AdminAuthResponse, AdminStats, AdminUserResponse, ProjectTestCaseCount
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse
+from app.models.schemas import (
+    AdminAuthRequest, GenericResponse,
+    AdminUserListResponse, AdminTestcaseListResponse, AdminBanRequest,
+)
 from app.services.auth import admin_auth, verify_admin_session
-from typing import List, Optional
+from app.services.admin import get_all_users, ban_user, unban_user, get_all_testcases
 
 router = APIRouter()
 
 
 @router.api_route(
     path="/login",
-    response_model=AdminAuthResponse,
-    summary="For admin to login",
-    description="Admin enters in a fixed username and password, returns a session token 5 hours limit",
+    summary="Admin Login",
+    description="Admin enters a fixed username and password, returns a session token valid for 1 hour.",
     responses={
-        200: {"model": AdminAuthResponse, "description": "Successfully login"},
-        401: {"model": AdminAuthResponse, "description": "Unauthorized"},
+        200: {"description": "Successfully logged in", "content": {"application/json": {"schema": {"properties": {"session_token": {"type": "string"}}}}}},
+        401: {"model": GenericResponse, "description": "Unauthorized"},
     },
-    deprecated=False,
     methods=["POST"],
+    response_class=JSONResponse,
 )
 async def admin_login(request: AdminAuthRequest):
-    result = await admin_auth(request=request)
-
-    return result
+    return await admin_auth(request=request)
 
 
-@router.get(
-    "/stats",
-    response_model=AdminStats,
-    summary="Get admin dashboard stats",
+@router.api_route(
+    path="/users",
+    response_model=AdminUserListResponse,
+    summary="List All Users",
+    description="Returns all registered users. Sensitive token fields are excluded.",
+    responses={
+        200: {"model": AdminUserListResponse, "description": "Users retrieved successfully"},
+        401: {"model": GenericResponse, "description": "Unauthorized"},
+    },
+    methods=["GET"],
+    response_class=JSONResponse,
 )
-async def get_stats(session=Depends(verify_admin_session)):
-    # Mock data to match mobile requirements
-    return AdminStats(
-        totalUsers=1,
-        activeUsers=1,
-        deletedUsers=0,
-        totalTestCases=10,
-        projectTestCases=[
-            ProjectTestCaseCount(projectKey="DEMO", projectName="Demo Project", count=10)
-        ]
-    )
+async def list_users(session=Depends(verify_admin_session)):
+    return (await get_all_users()).model_dump()
 
 
-@router.get(
-    "/users",
-    response_model=List[AdminUserResponse],
-    summary="Get all users",
+@router.api_route(
+    path="/users/ban",
+    response_model=GenericResponse,
+    summary="Ban User",
+    description="Soft-deletes a user by setting is_banned = true.",
+    responses={
+        200: {"model": GenericResponse, "description": "User banned successfully"},
+        401: {"model": GenericResponse, "description": "Unauthorized"},
+        404: {"model": GenericResponse, "description": "User not found"},
+    },
+    methods=["POST"],
+    response_class=JSONResponse,
 )
-async def get_users(session=Depends(verify_admin_session)):
-    # Mock data to match mobile requirements
-    return [
-        AdminUserResponse(
-            id="1",
-            name="Admin User",
-            email="admin@example.com",
-            role="admin",
-            isActive=True,
-            createdAt="2024-03-12T00:00:00Z"
-        )
-    ]
+async def ban(body: AdminBanRequest, session=Depends(verify_admin_session)):
+    await ban_user(body.user_id)
+    return JSONResponse(content={"detail": f"User {body.user_id} has been banned."})
 
 
-@router.get(
-    "/testcases",
-    summary="Get admin test cases",
+@router.api_route(
+    path="/users/unban",
+    response_model=GenericResponse,
+    summary="Unban User",
+    description="Restores a banned user by setting is_banned = false.",
+    responses={
+        200: {"model": GenericResponse, "description": "User unbanned successfully"},
+        401: {"model": GenericResponse, "description": "Unauthorized"},
+        404: {"model": GenericResponse, "description": "User not found"},
+    },
+    methods=["POST"],
+    response_class=JSONResponse,
 )
-@router.get(
-    "/test-cases",
-    summary="Get admin test cases (alias)",
-)
-async def get_admin_testcases(
-    projectKey: Optional[str] = None,
-    session=Depends(verify_admin_session),
-):
-    # Mock data compatible with mobile AdminTestCase type.
-    data = [
-        {
-            "id": "case-1",
-            "projectKey": "DEMO",
-            "projectName": "Demo Project",
-            "issueKey": "DEMO-101",
-            "requirement": "Login success flow should return 200 and auth token",
-            "tests": [
-                {
-                    "id": "t-1",
-                    "title": "Valid login",
-                    "type": "Functional",
-                    "description": "User logs in with valid credentials",
-                    "steps": [
-                        "POST /api/auth/login with valid username/password",
-                        "Verify response status is 200",
-                        "Verify token exists in response body",
-                    ],
-                    "url": "/api/auth/login",
-                    "method": "POST",
-                }
-            ],
-            "createdAt": "2025-03-03T00:00:00Z",
-        },
-        {
-            "id": "case-2",
-            "projectKey": "DEMO",
-            "projectName": "Demo Project",
-            "issueKey": "DEMO-102",
-            "requirement": "Invalid password should return 401",
-            "tests": [
-                {
-                    "id": "t-2",
-                    "title": "Invalid password",
-                    "type": "Negative",
-                    "description": "Login should fail with wrong password",
-                    "steps": [
-                        "POST /api/auth/login with wrong password",
-                        "Verify response status is 401",
-                        "Verify error message is returned",
-                    ],
-                    "url": "/api/auth/login",
-                    "method": "POST",
-                }
-            ],
-            "createdAt": "2025-03-04T00:00:00Z",
-        },
-        {
-            "id": "case-3",
-            "projectKey": "PAY",
-            "projectName": "Payment Service",
-            "issueKey": "PAY-55",
-            "requirement": "Create payment intent should return 200",
-            "tests": [
-                {
-                    "id": "t-3",
-                    "title": "Create payment intent",
-                    "type": "Integration",
-                    "description": "Backend creates payment intent",
-                    "steps": [
-                        "POST /api/payments/create-intent",
-                        "Verify response status is 200",
-                        "Verify client_secret is present",
-                    ],
-                    "url": "/api/payments/create-intent",
-                    "method": "POST",
-                }
-            ],
-            "createdAt": "2025-03-05T00:00:00Z",
-        },
-    ]
+async def unban(body: AdminBanRequest, session=Depends(verify_admin_session)):
+    await unban_user(body.user_id)
+    return JSONResponse(content={"detail": f"User {body.user_id} has been unbanned."})
 
-    if projectKey:
-        return [d for d in data if d["projectKey"].upper() == projectKey.upper()]
-    return data
+
+@router.api_route(
+    path="/testcases",
+    response_model=AdminTestcaseListResponse,
+    summary="List All Generated Testcases",
+    description="Returns all testcase records showing who generated them, from which project, when, and how many testcases are in each suite.",
+    responses={
+        200: {"model": AdminTestcaseListResponse, "description": "Testcases retrieved successfully"},
+        401: {"model": GenericResponse, "description": "Unauthorized"},
+    },
+    methods=["GET"],
+    response_class=JSONResponse,
+)
+async def list_testcases(session=Depends(verify_admin_session)):
+    return (await get_all_testcases()).model_dump()

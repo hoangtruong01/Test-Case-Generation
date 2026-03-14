@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 
 
 class GenericResponse(BaseModel):
@@ -30,24 +31,32 @@ class TokenResponse(BaseModel):
     token: str
 
 
-class ProjectTestCaseCount(BaseModel):
-    projectKey: str
-    projectName: str
-    count: int
-
-
-class AdminStats(BaseModel):
-    totalUsers: int
-    activeUsers: int
-    deletedUsers: int
-    totalTestCases: int
-    projectTestCases: List[ProjectTestCaseCount]
-
-
-class AdminUserResponse(BaseModel):
+# Admin — user management
+class AdminUserView(BaseModel):
     id: str
-    name: str
-    email: str
-    role: str
-    isActive: bool
-    createdAt: str
+    user: str
+    is_token_expired: bool
+    is_banned: bool
+    last_logged_in: Optional[datetime] = None
+
+
+class AdminUserListResponse(BaseModel):
+    users: List[AdminUserView]
+
+
+# Admin — testcase view
+class AdminTestcaseView(BaseModel):
+    id: str
+    user: Optional[str] = None
+    jira_project_name: Optional[str] = None
+    created_at: datetime
+    testcase_count: int
+    testsuite: Optional[List[dict]] = None
+
+
+class AdminTestcaseListResponse(BaseModel):
+    testcases: List[AdminTestcaseView]
+
+
+class AdminBanRequest(BaseModel):
+    user_id: str
