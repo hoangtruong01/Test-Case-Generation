@@ -605,12 +605,16 @@ const EndpointsPage = () => {
                           );
                         }
                         // show returned script if present
-                        const text = res?.data?.text || res?.text || res?.script || null;
-                        if (text && typeof text === "string") setScriptResult(text);
+                        const text =
+                          res?.data?.text || res?.text || res?.script || null;
+                        if (text && typeof text === "string")
+                          setScriptResult(text);
                         toast.success("Script generation requested");
                       } else {
                         console.log("generateTestScript payload:", payload);
-                        toast.success("Script request prepared (no API in client)");
+                        toast.success(
+                          "Script request prepared (no API in client)",
+                        );
                       }
                     } catch (err) {
                       console.error(err);
@@ -649,8 +653,15 @@ const EndpointsPage = () => {
                 </button>
                 <button
                   onClick={() => {
-                    const ext = scriptLanguage === "javascript" ? "js" : scriptLanguage === "typescript" ? "ts" : "py";
-                    const blob = new Blob([scriptResult], { type: "text/plain;charset=utf-8" });
+                    const ext =
+                      scriptLanguage === "javascript"
+                        ? "js"
+                        : scriptLanguage === "typescript"
+                          ? "ts"
+                          : "py";
+                    const blob = new Blob([scriptResult], {
+                      type: "text/plain;charset=utf-8",
+                    });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
@@ -683,4 +694,3 @@ const EndpointsPage = () => {
 };
 
 export default EndpointsPage;
- 
