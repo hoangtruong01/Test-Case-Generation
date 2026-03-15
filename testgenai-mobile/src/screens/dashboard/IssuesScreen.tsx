@@ -36,7 +36,13 @@ const IssuesScreen: React.FC<Props> = ({ navigation, route }) => {
   const { projectKey } = route.params;
   const { colors } = useTheme();
   const { isJiraAuthenticated } = useAuthStore();
-  const { issues, setIssues, selectedProject } = useAppStore();
+  const {
+    issues,
+    setIssues,
+    selectedProject,
+    projects,
+    setGeneratedTestcases,
+  } = useAppStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -114,7 +120,7 @@ const IssuesScreen: React.FC<Props> = ({ navigation, route }) => {
     [issues, search],
   );
 
-  const handleGenerateTestcases = () => {
+  const handleGenerateTestcases = async () => {
     if (selected.size === 0) return;
 
     const descriptions = issues
@@ -122,9 +128,38 @@ const IssuesScreen: React.FC<Props> = ({ navigation, route }) => {
       .map((i) => i.fields?.description || i.fields?.summary || "")
       .filter(Boolean);
 
-    navigation.navigate("CollectionPicker", {
-      issueDescriptions: descriptions,
-    });
+    const jiraProjectName =
+      selectedProject?.name ||
+      projects.find((p) => p.key === projectKey)?.name ||
+      "";
+
+    if (!jiraProjectName) {
+      Toast.show({
+        type: "error",
+        text1: "Missing project name",
+        text2: "Please reload project and try again",
+      });
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const res = await api.generateTestcases(jiraProjectName, descriptions);
+      const data = res as Record<string, unknown>;
+      const tcs =
+        (data.testcases as unknown[]) ||
+        (data.testCases as unknown[]) ||
+        (data.data as unknown[]) ||
+        (Array.isArray(res) ? res : []);
+
+      setGeneratedTestcases(tcs as any);
+      Toast.show({ type: "success", text1: "Testcases generated" });
+      navigation.navigate("GeneratedTestcases");
+    } catch (err) {
+      Toast.show({ type: "error", text1: "Failed to generate testcases" });
+    } finally {
+      setGenerating(false);
+    }
   };
 
   if (!isJiraAuthenticated) {

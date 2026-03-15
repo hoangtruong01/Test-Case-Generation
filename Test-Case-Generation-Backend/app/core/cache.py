@@ -1,6 +1,7 @@
 import redis.asyncio as redis
 import json
 import logging
+import time
 from typing import Optional, Any
 from pydantic import BaseModel
 from app.core.config import settings
@@ -18,6 +19,14 @@ redis_client = redis.Redis(
 
 # In-memory fallback for when Redis is dead
 _memory_cache = {}
+_memory_expiry = {}
+
+
+def _memory_is_expired(key: str) -> bool:
+    exp = _memory_expiry.get(key)
+    if exp is None:
+        return False
+    return exp <= time.time()
 
 async def redis_healthcheck() -> None:
     """
@@ -46,6 +55,11 @@ async def cache_get(key: str):
         logger.warning(f"Redis get failed ({e}), falling back to memory.")
     
     # Fallback to in-memory
+    if _memory_is_expired(key):
+        _memory_cache.pop(key, None)
+        _memory_expiry.pop(key, None)
+        return None
+
     result = _memory_cache.get(key)
     if result:
         return json.loads(result)
@@ -71,7 +85,16 @@ async def cache_set(
             await redis_client.expire(name=key, time=expire_in)
         return
     except Exception as e:
-        raise Exception(f"Redis Set Failed: {e}")
+        logger.warning(f"Redis set failed ({e}), falling back to memory.")
+
+    # Fallback to in-memory
+    _memory_cache[key] = val_json
+    if expire_at is not None:
+        _memory_expiry[key] = float(expire_at)
+    elif expire_in is not None:
+        _memory_expiry[key] = time.time() + float(expire_in)
+    else:
+        _memory_expiry.pop(key, None)
 
 
 async def cache_increment(key: str, expire_in: int) -> int:
@@ -88,4 +111,22 @@ async def cache_increment(key: str, expire_in: int) -> int:
             await redis_client.expire(key, expire_in)
         return count
     except Exception as e:
-        raise Exception(f"Redis Increment Failed: {e}")
+        logger.warning(f"Redis increment failed ({e}), falling back to memory.")
+
+    # Fallback to in-memory
+    if _memory_is_expired(key):
+        _memory_cache.pop(key, None)
+        _memory_expiry.pop(key, None)
+
+    current = _memory_cache.get(key)
+    try:
+        base = int(json.loads(current)) if current is not None else 0
+    except Exception:
+        base = 0
+
+    next_count = base + 1
+    _memory_cache[key] = json.dumps(next_count)
+    if key not in _memory_expiry:
+        _memory_expiry[key] = time.time() + float(expire_in)
+
+    return next_count

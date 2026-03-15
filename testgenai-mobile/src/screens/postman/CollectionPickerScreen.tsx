@@ -19,7 +19,7 @@ import Toast from "react-native-toast-message";
 type Props = {
   navigation: NativeStackNavigationProp<any>;
   route: RouteProp<
-    { CollectionPicker: { issueDescriptions: string[] } },
+    { CollectionPicker: { testcases: Array<Record<string, unknown>> } },
     "CollectionPicker"
   >;
 };
@@ -29,7 +29,7 @@ type Props = {
  * Replaces the web modal PostmanCollectionPicker + generate flow.
  */
 const CollectionPickerScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { issueDescriptions } = route.params;
+  const { testcases } = route.params;
   const { colors } = useTheme();
   const [collections, setCollections] = useState<PostmanCollection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,11 +53,15 @@ const CollectionPickerScreen: React.FC<Props> = ({ navigation, route }) => {
     if (!selectedId) return;
     setGenerating(true);
     try {
-      await api.generateTestcases(selectedId, issueDescriptions);
-      Toast.show({ type: "success", text1: "Test cases generated!" });
-      navigation.navigate("CollectionDetail", { collectionId: selectedId });
+      await api.generateEndpoints(testcases, {
+        collection_id: selectedId,
+      });
+      Toast.show({ type: "success", text1: "Endpoints generated" });
+      navigation.navigate("Dashboard", {
+        screen: "EndpointsTab",
+      });
     } catch (err) {
-      Toast.show({ type: "error", text1: "Failed to generate test cases" });
+      Toast.show({ type: "error", text1: "Failed to generate endpoints" });
     } finally {
       setGenerating(false);
     }
@@ -103,8 +107,8 @@ const CollectionPickerScreen: React.FC<Props> = ({ navigation, route }) => {
           Select Collection
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {issueDescriptions.length} issue
-          {issueDescriptions.length !== 1 ? "s" : ""} selected for generation
+          {testcases.length} testcase
+          {testcases.length !== 1 ? "s" : ""} selected for generation
         </Text>
       </View>
 
@@ -139,7 +143,7 @@ const CollectionPickerScreen: React.FC<Props> = ({ navigation, route }) => {
       {selectedId && (
         <View style={[styles.footer, { borderColor: colors.border }]}>
           <Button
-            title="Generate Test Cases"
+            title="Generate Endpoints"
             onPress={handleGenerate}
             loading={generating}
             variant="primary"

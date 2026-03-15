@@ -14,6 +14,7 @@ import ForgotPasswordScreen from "../screens/auth/ForgotPasswordScreen";
 import JiraAuthScreen from "../screens/auth/JiraAuthScreen";
 import DashboardTabs from "./DashboardTabs";
 import IssuesScreen from "../screens/dashboard/IssuesScreen";
+import GeneratedTestcasesScreen from "../screens/dashboard/GeneratedTestcasesScreen";
 import CollectionDetailScreen from "../screens/postman/CollectionDetailScreen";
 import CollectionPickerScreen from "../screens/postman/CollectionPickerScreen";
 import UserManagementScreen from "../screens/admin/UserManagementScreen";
@@ -102,6 +103,14 @@ const RootNavigator: React.FC = () => {
             title: `${(route.params as { projectKey: string }).projectKey} Issues`,
             headerBackTitle: "Projects",
           })}
+        />
+        <Stack.Screen
+          name="GeneratedTestcases"
+          component={GeneratedTestcasesScreen}
+          options={{
+            title: "Generated Testcases",
+            headerBackTitle: "Issues",
+          }}
         />
         <Stack.Screen
           name="CollectionDetail"

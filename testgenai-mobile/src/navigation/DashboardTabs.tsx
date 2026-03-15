@@ -11,6 +11,7 @@ import AdminTestCasesScreen from "../screens/admin/AdminTestCasesScreen";
 import UserManagementScreen from "../screens/admin/UserManagementScreen";
 import ProjectsScreen from "../screens/dashboard/ProjectsScreen";
 import PostmanScreen from "../screens/postman/PostmanScreen";
+import EndpointsScreen from "../screens/postman/EndpointsScreen";
 import SettingsScreen from "../screens/dashboard/SettingsScreen";
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -113,12 +114,22 @@ const DashboardTabs: React.FC = () => {
             }}
           />
           <Tab.Screen
-            name="TestCasesTab"
+            name="PostmanTab"
             component={PostmanScreen}
             options={{
               tabBarLabel: "Postman",
               tabBarIcon: ({ color, size }) => (
                 <Ionicons name="send-outline" size={size} color={color} />
+              ),
+            }}
+          />
+          <Tab.Screen
+            name="EndpointsTab"
+            component={EndpointsScreen}
+            options={{
+              tabBarLabel: "Endpoints",
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="globe-outline" size={size} color={color} />
               ),
             }}
           />

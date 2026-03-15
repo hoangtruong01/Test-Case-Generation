@@ -4,18 +4,26 @@ from app.models.schemas import (
     AdminTestcaseView, AdminTestcaseListResponse,
 )
 from fastapi import HTTPException
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 async def get_all_users() -> AdminUserListResponse:
     """
     Returns all users, excluding sensitive token fields.
     """
-    db = await get_client()
-    result = await (
-        db.table("user")
-        .select("id, user, is_token_expired, is_banned, last_logged_in")
-        .execute()
-    )
+    try:
+        db = await get_client()
+        result = await (
+            db.table("user")
+            .select("id, user, is_token_expired, is_banned, last_logged_in")
+            .execute()
+        )
+    except Exception as e:
+        logger.warning(f"Failed to fetch admin users from database: {e}")
+        return AdminUserListResponse(users=[])
 
     users = [AdminUserView(**row) for row in (result.data or [])]
     return AdminUserListResponse(users=users)
@@ -58,12 +66,16 @@ async def get_all_testcases() -> AdminTestcaseListResponse:
     Returns all testcase records with who generated them and from which project.
     Includes a count of testcases in each testsuite instead of the raw JSON.
     """
-    db = await get_client()
-    result = await (
-        db.table("testcase")
-        .select("id, user, jira_project_name, created_at, testsuite")
-        .execute()
-    )
+    try:
+        db = await get_client()
+        result = await (
+            db.table("testcase")
+            .select("id, user, jira_project_name, created_at, testsuite")
+            .execute()
+        )
+    except Exception as e:
+        logger.warning(f"Failed to fetch admin testcases from database: {e}")
+        return AdminTestcaseListResponse(testcases=[])
 
     testcases = [
         AdminTestcaseView(

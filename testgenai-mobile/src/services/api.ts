@@ -68,6 +68,39 @@ const withAuth = async (
   };
 };
 
+const mapAdminTestCase = (row: Record<string, unknown>): AdminTestCase => {
+  const testsuite = Array.isArray(row.testsuite)
+    ? (row.testsuite as Record<string, unknown>[])
+    : [];
+
+  return {
+    id: String(row.id || ""),
+    projectKey: String(row.jira_project_name || "Unknown"),
+    projectName: String(row.jira_project_name || "Unknown"),
+    issueKey: String(row.user || row.id || "N/A"),
+    requirement: undefined,
+    tests: testsuite.map((t, index) => {
+      const rawSteps = Array.isArray(t.test_steps)
+        ? (t.test_steps as Record<string, unknown>[])
+        : [];
+
+      return {
+        id: String(t.test_case_id || `${row.id}-${index}`),
+        title: String(t.title || t.test_case_id || "Untitled test"),
+        type: "Functional",
+        description:
+          typeof t.description === "string" ? t.description : undefined,
+        steps: rawSteps
+          .map((s) => String(s.action || "").trim())
+          .filter(Boolean),
+        url: undefined,
+        method: undefined,
+      };
+    }),
+    createdAt: String(row.created_at || ""),
+  };
+};
+
 export const api = {
   // ==================== JIRA ====================
 
@@ -262,14 +295,14 @@ export const api = {
   // ==================== TEST GENERATION ====================
 
   async generateTestcases(
-    collectionId: string,
+    jiraProjectName: string,
     issueDescriptions: string[] = [],
   ): Promise<unknown> {
-    if (!collectionId) throw new Error("collectionId is required");
+    if (!jiraProjectName) throw new Error("jiraProjectName is required");
 
     const headers = await withSession();
     return apiCall(
-      `/testcases?collectionId=${encodeURIComponent(collectionId)}`,
+      `/testcases?jira_project_name=${encodeURIComponent(jiraProjectName)}`,
       {
         method: "POST",
         headers,
@@ -279,6 +312,63 @@ export const api = {
         }),
       },
     );
+  },
+
+  async getPostmanRequests(
+    collectionId: string,
+  ): Promise<{ requests?: Record<string, unknown>[]; error?: string }> {
+    if (!collectionId) return { error: "collectionId is required" };
+
+    try {
+      const headers = await withSession();
+      const response = await apiCall(
+        `/postman/requests?collectionId=${encodeURIComponent(collectionId)}`,
+        {
+          method: "GET",
+          headers,
+        },
+      );
+
+      const raw = Array.isArray(response)
+        ? response
+        : response.requests && Array.isArray(response.requests)
+          ? response.requests
+          : [];
+
+      return { requests: raw as Record<string, unknown>[] };
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error ? err.message : "Failed to load endpoint list",
+      };
+    }
+  },
+
+  async generateEndpoints(
+    testcases: Array<Record<string, unknown>>,
+    options: {
+      collection_id?: string;
+      collection_name?: string;
+      workspace_id?: string;
+      think?: boolean;
+    } = {},
+  ): Promise<unknown> {
+    if (!Array.isArray(testcases) || testcases.length === 0) {
+      throw new Error("No testcases provided");
+    }
+
+    const headers = await withSession();
+    return apiCall("/postman/generate-http", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        testcases,
+        collection_id: options.collection_id || "",
+        collection_name: options.collection_name || "Generated HTTP Requests",
+        workspace_id: options.workspace_id || "",
+        think: options.think || false,
+      }),
+    });
   },
 
   // ==================== AUTH (User/Admin) ====================
@@ -302,6 +392,7 @@ export const api = {
       })) as Record<string, unknown>;
 
       const token =
+        (response.session_token as string | undefined) ||
         (response.token as string | undefined) ||
         (response.access_token as string | undefined);
 
@@ -349,22 +440,55 @@ export const api = {
   // ==================== ADMIN ====================
 
   async getAdminStats(): Promise<AdminStats> {
-    const headers = await withAuth();
-    return apiCall("/admin/stats", { method: "GET", headers });
+    const [users, testCases] = await Promise.all([
+      this.getUsers(),
+      this.getAdminTestCases(),
+    ]);
+
+    const projectMap = new Map<string, number>();
+    for (const item of testCases) {
+      const key = item.projectKey || "Unknown";
+      const current = projectMap.get(key) || 0;
+      projectMap.set(key, current + item.tests.length);
+    }
+
+    return {
+      totalUsers: users.length,
+      activeUsers: users.filter((u) => u.isActive).length,
+      deletedUsers: users.filter((u) => !u.isActive).length,
+      totalTestCases: testCases.reduce((sum, tc) => sum + tc.tests.length, 0),
+      projectTestCases: Array.from(projectMap.entries()).map(([k, count]) => ({
+        projectKey: k,
+        projectName: k,
+        count,
+      })),
+    };
   },
 
   async getUsers(): Promise<AdminUser[]> {
     const headers = await withAuth();
     const response = await apiCall("/admin/users", { method: "GET", headers });
-    return Array.isArray(response) ? response : response.users || [];
+    const raw = Array.isArray(response) ? response : response.users || [];
+
+    return raw.map(
+      (u: Record<string, unknown>): AdminUser => ({
+        id: String(u.id || ""),
+        name: String(u.user || "Unknown"),
+        email: `${String(u.user || "unknown")}@jira.local`,
+        role: "user",
+        isActive: !Boolean(u.is_banned),
+        createdAt: String(u.last_logged_in || new Date().toISOString()),
+      }),
+    );
   },
 
   async softDeleteUser(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const headers = await withAuth();
-      await apiCall(`/admin/users/${encodeURIComponent(userId)}/soft-delete`, {
-        method: "PATCH",
+      await apiCall("/admin/users/ban", {
+        method: "POST",
         headers,
+        body: JSON.stringify({ user_id: userId }),
       });
       return { success: true };
     } catch (err) {
@@ -378,9 +502,10 @@ export const api = {
   async restoreUser(userId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const headers = await withAuth();
-      await apiCall(`/admin/users/${encodeURIComponent(userId)}/restore`, {
-        method: "PATCH",
+      await apiCall("/admin/users/unban", {
+        method: "POST",
         headers,
+        body: JSON.stringify({ user_id: userId }),
       });
       return { success: true };
     } catch (err) {
@@ -393,11 +518,17 @@ export const api = {
 
   async getAdminTestCases(projectKey?: string): Promise<AdminTestCase[]> {
     const headers = await withAuth();
-    const query = projectKey ? `?projectKey=${encodeURIComponent(projectKey)}` : "";
-    const response = await apiCall(`/admin/testcases${query}`, {
+    const response = await apiCall("/admin/testcases", {
       method: "GET",
       headers,
     });
-    return Array.isArray(response) ? response : response.testcases || [];
+
+    const raw = Array.isArray(response) ? response : response.testcases || [];
+    const mapped = raw.map((row: Record<string, unknown>) =>
+      mapAdminTestCase(row),
+    );
+
+    if (!projectKey) return mapped;
+    return mapped.filter((tc: AdminTestCase) => tc.projectKey === projectKey);
   },
 };
