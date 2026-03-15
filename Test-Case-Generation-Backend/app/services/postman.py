@@ -2,6 +2,7 @@
 from app.core.postman import postbot_generate, get_all_requestIds, create_collection, add_items_to_collection
 from app.core.llm import local_llm_chat
 from typing import Optional
+import json
 
 
 async def generate_all_test_scripts(
@@ -64,12 +65,39 @@ async def generate_http_requests(
     """
     # Build a condensed prompt from testcase titles + descriptions
     descriptions = []
-    for tc in testcases:
+    for raw_tc in testcases:
+        # Normalize testcase input: accept JSON string, pydantic model, dict, or other
+        if isinstance(raw_tc, str):
+            try:
+                tc = json.loads(raw_tc)
+            except Exception:
+                tc = {"title": raw_tc, "description": ""}
+        elif hasattr(raw_tc, "model_dump"):
+            try:
+                tc = raw_tc.model_dump()
+            except Exception:
+                try:
+                    tc = dict(raw_tc)
+                except Exception:
+                    tc = {"title": str(raw_tc), "description": ""}
+        elif isinstance(raw_tc, dict):
+            tc = raw_tc
+        else:
+            try:
+                tc = dict(raw_tc)
+            except Exception:
+                tc = {"title": str(raw_tc), "description": ""}
+
         title = tc.get("title", "")
         desc = tc.get("description") or ""
-        steps = " | ".join(
-            s.get("action", "") for s in (tc.get("test_steps") or [])
-        )
+        test_steps = tc.get("test_steps") or []
+        step_texts = []
+        for s in test_steps:
+            if isinstance(s, dict):
+                step_texts.append(s.get("action", ""))
+            else:
+                step_texts.append(str(s))
+        steps = " | ".join(step_texts)
         descriptions.append(f"- {title}: {desc}. Steps: {steps}")
 
     prompt = "\n".join(descriptions)

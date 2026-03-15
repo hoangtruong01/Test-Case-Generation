@@ -13,7 +13,7 @@ redis_client = redis.Redis(
     port=settings.REDIS_PORT,
     password=settings.REDIS_PASSWORD,
     decode_responses=True,
-    socket_connect_timeout=1, # Fast fail if not running
+    socket_connect_timeout=5, # Fast fail if not running
 )
 
 # In-memory fallback for when Redis is dead
