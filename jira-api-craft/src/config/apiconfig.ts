@@ -1,5 +1,12 @@
+const envBase = (import.meta.env.VITE_BACKEND_URL || "").trim();
+const isDev = Boolean(import.meta.env.DEV);
+
+// In production, backend URL should be provided via VITE_BACKEND_URL.
+// Fallback to same-origin only if env is missing.
+const resolvedBaseUrl = envBase || (isDev ? "http://localhost:8000" : window.location.origin);
+
 const API_CONFIG = {
-    API_BASE_URL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000',
+    API_BASE_URL: resolvedBaseUrl,
     jira: {
         login: '/jira/login',
         projects: '/jira/projects',
