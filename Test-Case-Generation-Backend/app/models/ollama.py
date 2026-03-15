@@ -1,4 +1,4 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 from typing import Optional, Dict, List, Any
 from app.models.enums import OllamaChatResponsePropertiesType, OllamaChatResponsePropertiesPriority, TestCaseStatus
 
@@ -58,13 +58,3 @@ class OllamaChatResponse(BaseModel):
 class OllamaChatRequest(BaseModel):
     issue_descriptions: List[str]
     think: Optional[bool] = False
-
-    @field_validator("issue_descriptions")
-    @classmethod
-    def validate_issue_descriptions(cls, v: List[str]) -> List[str]:
-        if len(v) > 50:
-            raise ValueError("issue_descriptions cannot exceed 50 items")
-        for desc in v:
-            if len(desc) > 5000:
-                raise ValueError("Each issue description cannot exceed 5000 characters")
-        return v

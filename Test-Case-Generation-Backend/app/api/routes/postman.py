@@ -1,13 +1,37 @@
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import JSONResponse
-from app.core.postman import get_all_collections, get_collection, get_all_request, postbot_generate
-from app.services.postman import generate_all_test_scripts
+from app.core.postman import get_all_collections, get_collection, get_all_request, postbot_generate, get_user
+from app.services.postman import generate_all_test_scripts, generate_http_requests
 from app.services.auth import verify_postman_session
 from app.models.schemas import GenericResponse
-from app.models.postman import PostmanTestScriptRequest, PostmanTestScriptsRequest, PostmanRequest, PostmanCollectionShort
+from app.models.postman import PostmanTestScriptRequest, PostmanTestScriptsRequest, PostmanRequest, PostmanCollectionShort, GenerateHttpRequestsRequest
 from typing import List
 
 router = APIRouter()
+
+
+@router.api_route(
+    path="/me",
+    summary="Get Postman User Info",
+    description="Returns the authenticated Postman user's profile information.",
+    responses={
+        200: {"description": "User info successfully retrieved"},
+        401: {"model": GenericResponse, "description": "Invalid session/API key"},
+    },
+    methods=["GET"],
+    response_class=JSONResponse,
+)
+async def postman_me(session: str = Depends(verify_postman_session)):
+    data = await get_user(session)
+    # Extract only relevant user fields
+    user = data.get("user", {})
+    return JSONResponse(content={
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "fullName": user.get("fullName"),
+        "avatar": user.get("avatar"),
+        "isPublic": user.get("isPublic"),
+    })
 
 
 @router.api_route(
@@ -110,3 +134,31 @@ async def request(collectionId: str, session=Depends(verify_postman_session)):
     requestList = await get_all_request(collectionId, session)
 
     return requestList
+
+
+@router.api_route(
+    path="/generate-http",
+    summary="Generate HTTP Requests from Testcases",
+    description=(
+        "Uses the local LLM to derive HTTP requests from the provided testcases, "
+        "then inserts them into a Postman collection. "
+        "If no collection_id is provided, a new collection is created automatically."
+    ),
+    responses={
+        200: {"description": "HTTP requests generated and inserted into Postman collection"},
+        401: {"model": GenericResponse, "description": "Invalid session/API key"},
+        422: {"model": GenericResponse, "description": "Invalid request body"},
+    },
+    methods=["POST"],
+    response_class=JSONResponse,
+)
+async def generate_http(request: GenerateHttpRequestsRequest, session: str = Depends(verify_postman_session)):
+    result = await generate_http_requests(
+        testcases=request.testcases,
+        key=session,
+        collection_id=request.collection_id,
+        collection_name=request.collection_name or "Generated HTTP Requests",
+        workspace_id=request.workspace_id,
+        think=request.think or False,
+    )
+    return JSONResponse(content=result)

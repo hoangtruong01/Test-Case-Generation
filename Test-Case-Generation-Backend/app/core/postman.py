@@ -47,35 +47,57 @@ async def get_all_workspaces(key: str):
     return response.json()
 
 
-async def create_request(collection_id: str, payload: Any, key) -> Any:
+async def create_collection(name: str, key: str, items: list = None, workspace_id: str = None) -> str:
+    """Creates a new Postman collection with optional items, returns its ID."""
+    payload = {
+        "collection": {
+            "info": {
+                "name": name,
+                "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+            },
+            "item": items or []
+        }
+    }
+    params = {}
+    if workspace_id:
+        params["workspace"] = workspace_id
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            url=f"{POSTMAN_URLS['collections']}/{collection_id}/requests",
+            url=POSTMAN_URLS['collections'],
             headers=_get_headers(key),
             json=payload,
+            params=params
         )
-    return response.json()
+    response.raise_for_status()
+    return response.json()["collection"]["id"]
+
+
+async def add_items_to_collection(collection_id: str, new_items: list, key: str) -> None:
+    """Fetches existing collection and PUTs it back with new items appended."""
+    existing = await get_collection(collection_id=collection_id, key=key)
+    collection_data = existing.get("collection", {})
+    current_items = collection_data.get("item", [])
+
+    collection_data["item"] = current_items + new_items
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.put(
+            url=f"{POSTMAN_URLS['collections']}/{collection_id}",
+            headers=_get_headers(key),
+            json={"collection": collection_data}
+        )
+    response.raise_for_status()
 
 
 async def get_all_requestIds(collection_id: str, key: str):
     collection = await get_collection(collection_id=collection_id, key=key)
-    result = []
-
-    for request in collection["collection"]["item"]:
-        result.append(request['id'])
-
-    return result
+    return [item['id'] for item in collection["collection"]["item"]]
 
 
 async def get_all_request(collection_id: str, key: str):
     collection = await get_collection(collection_id=collection_id, key=key)
-    result = []
-
-    for request in collection["collection"]["item"]:
-        result.append(request)
-
-    return result
+    return list(collection["collection"]["item"])
 
 
 async def get_user(key: str):

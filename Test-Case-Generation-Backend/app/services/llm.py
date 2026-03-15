@@ -63,4 +63,4 @@ async def generate_tests(
             "testsuite": testcases
         }).execute()
 
-    return testcases
+    return {"testcases": testcases}

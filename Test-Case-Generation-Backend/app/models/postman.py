@@ -95,3 +95,11 @@ class PostmanRequest(BaseModel):
     dataMode: str
     rawModeData: Optional[str] = None
     dataOptions: DataOptions
+
+
+class GenerateHttpRequestsRequest(BaseModel):
+    testcases: List[Any]
+    collection_id: Optional[str] = None
+    collection_name: Optional[str] = "Generated HTTP Requests"
+    workspace_id: Optional[str] = None
+    think: Optional[bool] = False

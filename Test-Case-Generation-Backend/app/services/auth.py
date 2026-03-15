@@ -5,14 +5,14 @@ from app.services.jira import get_jira_user_info, refresh_jira_token
 from urllib.parse import urlencode
 from authlib.integrations.httpx_client import OAuth2Client
 from app.core.config import settings
+from app.models.schemas import AdminAuthRequest
 from app.core.postman import get_user
-from app.core.cache import cache_set, cache_get
+from app.core.cache import cache_set, cache_get, cache_increment
 from app.core.database import get_client
 import secrets
 import json
 import traceback
 from datetime import datetime, timezone
-from app.models.schemas import AdminAuthRequest
 
 JIRA_SCOPE = ["read:me", "read:jira-user", "read:jira-work", "offline_access"]
 JIRA_AUTH_BASE_URL = "https://auth.atlassian.com/authorize"
@@ -24,9 +24,15 @@ JIRA_OAUTH = OAuth2Client(
     redirect_uri=settings.JIRA_REDIRECT_URL
 )
 ADMIN_REDIRECT_URL = "http://localhost:8000/admin"
+ADMIN_LOGIN_MAX_ATTEMPTS = 5
+ADMIN_LOGIN_WINDOW_SECONDS = 60 * 5  # 5 minutes
 
 
 async def admin_auth(request: AdminAuthRequest) -> JSONResponse:
+    attempts = await cache_increment("admin_login_attempts", expire_in=ADMIN_LOGIN_WINDOW_SECONDS)
+    if attempts > ADMIN_LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+
     if request.username == settings.ADMIN_USERNAME and request.password == settings.ADMIN_PASSWORD:
         session_token = _generate_token()
         await cache_set(
@@ -62,9 +68,9 @@ async def jira_callback(request: Request) -> RedirectResponse:
             client_secret=settings.JIRA_SECRET,
             authorization_response=str(request.url)
         )
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Token fetch failed: {e}")
+        raise HTTPException(status_code=500, detail="Token fetch failed")
 
     # Convert OAuth2Token to a plain dict for JSON serialization
     token_dict = dict(token_json)
@@ -77,6 +83,7 @@ async def jira_callback(request: Request) -> RedirectResponse:
     if access_token:
         try:
             user_info_raw = await get_jira_user_info(access_token)
+            
             user_info = json.loads(user_info_raw) if isinstance(user_info_raw, str) else user_info_raw
             username = user_info.get("email") or user_info.get("name") or user_info.get("displayName")
         except Exception:
@@ -115,15 +122,10 @@ async def jira_callback(request: Request) -> RedirectResponse:
             "username": username
         }
     )
-
-    user_info_json = json.dumps(user_info) if user_info is not None else "null"
-
-    redirect_params = {
-        "session": session_token,
-        "user": user_info_json,
-    }
-
-    redirect_url = f"http://localhost:5173/dashboard/projects?{urlencode(redirect_params)}"
+    # Pass session token via URL fragment (#) — never hits server logs, referrer headers, or browser history
+    display_name = user_info.get("displayName", "") if user_info else ""
+    fragment_params = urlencode({"session": session_token, "display_name": display_name})
+    redirect_url = f"http://localhost:5173/dashboard/projects#{fragment_params}"
     return RedirectResponse(redirect_url)
 
 

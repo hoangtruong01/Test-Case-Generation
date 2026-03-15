@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from app.models.ollama import OllamaChatRequest, OllamaChatResponse
 from app.models.schemas import GenericResponse
@@ -10,6 +10,7 @@ router = APIRouter()
 
 @router.api_route(
     path="/testcases",
+    response_model=OllamaChatResponse,
     summary="Generate Testcases",
     description=(
         "Generates structured QA testcases from Jira issue descriptions using a local LLM. "
@@ -17,16 +18,9 @@ router = APIRouter()
         "appending to an existing testsuite if one already exists for the same user and project."
     ),
     responses={
-        200: {
-            "description": "Testcases successfully generated",
-            "content": {
-                "application/json": {
-                    "schema": OllamaChatResponse.model_json_schema()
-                }
-            }
-        },
+        200: {"description": "Testcases successfully generated"},
         401: {"model": GenericResponse, "description": "Invalid or missing session token"},
-        422: {"model": GenericResponse, "description": "Invalid request body"},
+        422: {"model": GenericResponse, "description": "Invalid request body or LLM output"},
     },
     methods=["POST"],
     response_class=JSONResponse,
@@ -36,8 +30,11 @@ async def get_testcases(
     request: OllamaChatRequest,
     session=Depends(verify_jira_session)
 ):
-    return await generate_tests(
-        jira_project_name=jira_project_name,
-        request=request,
-        session=session
-    )
+    try:
+        return await generate_tests(
+            jira_project_name=jira_project_name,
+            request=request,
+            session=session
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))

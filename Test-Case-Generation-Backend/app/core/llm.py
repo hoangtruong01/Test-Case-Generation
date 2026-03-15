@@ -233,89 +233,34 @@ async def ollama_healthcheck() -> None:
         response.raise_for_status()
 
 
-async def local_llm_chat(prompt: List[str], think: Optional[bool]) -> List[PostmanRequest]:
-    """
-    Interact with the local OLLAMA server to generate testcases from provided requirements.
-
-    Args:
-        prompt (List[str]): A list of strings representing the software requirements to be analyzed.
-        think (Optional[bool]): A boolean indicating whether the LLM should generate a single function or a code block based on the requirements.
-
-    Returns:
-        ChatResponse: A structured response validated by the OllamaChatResponse schema containing the generated testcases.
-
-    Raises:
-        ValueError: If the local LLM returns no response.
-    """
-
-    schema = TypeAdapter(List[PostmanRequest])
-
-    # Send user requirements to the custom Ollama model and enforce schema-valid JSON output
+async def _llm_chat(system_prompt: str, prompt: List[str], think: Optional[bool], schema: TypeAdapter):
+    """Shared Ollama chat invocation. Returns validated parsed response."""
     response = await ollama_client.chat(
         model=await get_ollama_model(),
         messages=[
-            {
-                "role": "system",
-                "content": SWD_MODEL_SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": f"Requirements: \n{prompt}"
-            }
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Requirements: \n{prompt}"}
         ],
         tools=None,
         stream=False,
         think=think,
         format=schema.json_schema()
     )
+    if not response or not response.message or not response.message.content:
+        raise ValueError("No response from LLM")
+    try:
+        return schema.validate_json(response.message.content)
+    except Exception:
+        raise ValueError("LLM returned malformed or truncated JSON — try fewer/shorter issue descriptions, or use a larger model")
 
-    # Fail fast if the LLM returns no response
-    if response is None or not response.message or not response.message.content:
-        raise ValueError("No Local LLM Response from Core LLM")
 
-    requests_list = schema.validate_json(response.message.content)
-
-    # Return structured response
-    return requests_list
+async def local_llm_chat(prompt: List[str], think: Optional[bool]) -> List[PostmanRequest]:
+    """Generate HTTP request definitions from requirements using the local LLM."""
+    schema = TypeAdapter(List[PostmanRequest])
+    return await _llm_chat(SWD_MODEL_SYSTEM_PROMPT, prompt, think, schema)
 
 
 async def local_llm_chat_testcases(prompt: List[str], think: Optional[bool]) -> OllamaChatResponse:
-    """
-    Interact with the local Ollama server to generate structured QA test cases
-    from provided requirements.
-
-    Args:
-        prompt (List[str]): A list of software requirement strings to analyze.
-        think (Optional[bool]): Whether to enable the model's reasoning mode.
-
-    Returns:
-        OllamaChatResponse: Validated response containing a list of test cases.
-
-    Raises:
-        ValueError: If the local LLM returns no response or empty content.
-    """
-
+    """Generate structured QA test cases from requirements using the local LLM."""
     schema = TypeAdapter(OllamaChatResponse)
-
-    response = await ollama_client.chat(
-        model=await get_ollama_model(),
-        messages=[
-            {
-                "role": "system",
-                "content": TESTCASE_SYSTEM_PROMPT
-            },
-            {
-                "role": "user",
-                "content": f"Requirements: \n{prompt}"
-            }
-        ],
-        tools=None,
-        stream=False,
-        think=think,
-        format=schema.json_schema()
-    )
-
-    if not response or not response.message or not response.message.content:
-        raise ValueError("No Local LLM Response from Core LLM")
-
-    return schema.validate_json(response.message.content)
+    return await _llm_chat(TESTCASE_SYSTEM_PROMPT, prompt, think, schema)
