@@ -9,6 +9,27 @@ from app.core.llm import ollama_init
 from fastapi.middleware.cors import CORSMiddleware
 
 
+def _build_allowed_origins() -> list[str]:
+    origins = {
+        "http://localhost:5173",  # Vite web
+        "http://localhost:8000",  # Self
+        "http://localhost:19006",  # Expo web
+        "http://localhost:19000",  # Expo metro
+        "http://localhost:8081",  # Metro default
+    }
+
+    if settings.FRONTEND_URL:
+        origins.add(settings.FRONTEND_URL.strip())
+
+    if settings.FRONTEND_ORIGINS:
+        for origin in settings.FRONTEND_ORIGINS.split(","):
+            cleaned = origin.strip()
+            if cleaned:
+                origins.add(cleaned)
+
+    return sorted(origins)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await ollama_init()
@@ -24,13 +45,9 @@ app = FastAPI(
 # CORS middleware for handling cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", # Vite web
-        "http://localhost:8000", # Self
-        "http://localhost:19006", # Expo web
-        "http://localhost:19000", # Expo metro
-        "http://localhost:8081", # Metro default
-    ],
+    allow_origins=_build_allowed_origins(),
+    # Also allow Vercel preview URLs: https://<anything>.vercel.app
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

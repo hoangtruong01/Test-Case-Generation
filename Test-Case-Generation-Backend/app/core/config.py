@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     JIRA_SECRET: Optional[str] = os.getenv("JIRA_SECRET")
     JIRA_REDIRECT_URL: Optional[str] = os.getenv("JIRA_REDIRECT_URL")
 
+    # Frontend settings (for CORS and OAuth callback redirect)
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Comma-separated list, e.g. "https://app.vercel.app,https://preview.vercel.app"
+    FRONTEND_ORIGINS: str = os.getenv("FRONTEND_ORIGINS", "")
+
 
 # Singleton settings instance shared across the application
 settings = Settings()

@@ -23,7 +23,6 @@ JIRA_OAUTH = OAuth2Client(
     scope=" ".join(JIRA_SCOPE),
     redirect_uri=settings.JIRA_REDIRECT_URL
 )
-ADMIN_REDIRECT_URL = "http://localhost:8000/admin"
 ADMIN_LOGIN_MAX_ATTEMPTS = 5
 ADMIN_LOGIN_WINDOW_SECONDS = 60 * 5  # 5 minutes
 
@@ -125,7 +124,8 @@ async def jira_callback(request: Request) -> RedirectResponse:
     # Pass session token via URL fragment (#) — never hits server logs, referrer headers, or browser history
     display_name = user_info.get("displayName", "") if user_info else ""
     fragment_params = urlencode({"session": session_token, "display_name": display_name})
-    redirect_url = f"http://localhost:5173/dashboard/projects#{fragment_params}"
+    frontend_base = (settings.FRONTEND_URL or "http://localhost:5173").rstrip("/")
+    redirect_url = f"{frontend_base}/dashboard/projects#{fragment_params}"
     return RedirectResponse(redirect_url)
 
 
