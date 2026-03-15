@@ -43,21 +43,21 @@ const AdminLayout = () => {
             Users
           </NavLink>
 
-          <NavLink to="/admin/projects" className={linkClass}>
+          {/* <NavLink to="/admin/projects" className={linkClass}>
             Projects
           </NavLink>
 
           <NavLink to="/admin/test-suites" className={linkClass}>
             Test Suites
-          </NavLink>
+          </NavLink> */}
 
           <NavLink to="/admin/test-cases" className={linkClass}>
             Test Cases
           </NavLink>
 
-          <NavLink to="/admin/jira-tokens" className={linkClass}>
+          {/* <NavLink to="/admin/jira-tokens" className={linkClass}>
             Jira Tokens
-          </NavLink>
+          </NavLink> */}
 
         </nav>
 

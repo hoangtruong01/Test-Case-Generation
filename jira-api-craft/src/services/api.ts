@@ -1,5 +1,7 @@
 import API_CONFIG, { API_BASE_URL } from "@/config/apiconfig";
-import { JiraIssue, JiraProject } from "@/types/Jira";
+import { JiraIssue, JiraProject } from "@/types/jira";
+import { AdminTestCase } from "./adminService";
+
 
 
 // Backend Configuration
@@ -32,6 +34,22 @@ const apiCall = async (
 // Mock data for demo — replace with real Axios calls when backend is ready
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Read session token from multiple possible storage keys
+const getSessionToken = () => {
+  try {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('jira_session') || localStorage.getItem('jira_token') || null;
+  } catch (e) { return null; }
+};
+
+const getSessionExp = () => {
+  try {
+    if (typeof window === 'undefined') return null;
+    const exp = localStorage.getItem('jira_session_exp') || localStorage.getItem('jira_token_exp');
+    return exp ? Number(exp) : null;
+  } catch (e) { return null; }
+};
+
 export const api = {
   async postmanLoginWithApiKey(apiKey: string): Promise<{ success: boolean; token?: string; error?: string }> {
     await delay(400);
@@ -44,7 +62,7 @@ export const api = {
       return { success: false, error: "Invalid API key" };
     }
     try {
-      const session = localStorage.getItem("jira_session");
+      const session = getSessionToken();
       if (!session) {
         return { success: false, error: "Please authenticate with Jira first (session token required)" };
       }
@@ -58,7 +76,13 @@ export const api = {
 
       if (response) {
         // Save token to localStorage for subsequent requests
-        localStorage.setItem("postman_apikey", apiKey);
+        // store under both variations to be tolerant of casing
+        try {
+          localStorage.setItem("postman_apikey", apiKey);
+          localStorage.setItem("postman_apiKey", apiKey);
+        } catch (e) {
+          /* ignore */
+        }
         api.getPostmanCollections(); // prefetch collections after login
         return { success: true };
       }
@@ -72,7 +96,7 @@ export const api = {
   async getPostmanCollections(): Promise<{ collections: Array<{ id: string; name: string; createdAt?: string }> } | { error: string }> {
 
     try {
-      const session = localStorage.getItem("jira_session");
+      const session = getSessionToken();
       if (!session) {
         return { error: "Please authenticate with Jira first (session token required)" };
       }
@@ -108,7 +132,7 @@ export const api = {
     if (!key) return { error: "API key required" };
 
     try {
-      const session = localStorage.getItem("jira_session");
+      const session = getSessionToken();
       if (!session) {
         return { error: "Please authenticate with Jira first (session token required)" };
       }
@@ -136,12 +160,12 @@ export const api = {
   // === ORIGINAL JIRA APIS ===
   async getProjects(): Promise<JiraProject[]> {
 
-    const session = localStorage.getItem("jira_session");
+    const session = getSessionToken();
     if (!session) {
       throw new Error("Please authenticate with Jira first (session token required)");
     }
-    const sessionExp = typeof window !== "undefined" ? localStorage.getItem("jira_session_exp") : null;
-    if (sessionExp && Number(sessionExp) <= Date.now()) {
+    const sessionExp = getSessionExp();
+    if (sessionExp && sessionExp <= Date.now()) {
       throw new Error("Jira session has expired. Please re-authenticate.");
     }
 
@@ -206,13 +230,12 @@ export const api = {
   },
 
   async getIssues(project: string): Promise<JiraIssue[]> {
-    // Require session token and projectKey to fetch issues from backend
-    const session = localStorage.getItem("jira_session");
+    const session = getSessionToken();
     if (!session) {
       throw new Error("Please authenticate with Jira first (session token required)");
     }
-    const sessionExp = typeof window !== "undefined" ? localStorage.getItem("jira_session_exp") : null;
-    if (sessionExp && Number(sessionExp) <= Date.now()) {
+    const sessionExp = getSessionExp();
+    if (sessionExp && sessionExp <= Date.now()) {
       throw new Error("Jira session has expired. Please re-authenticate.");
     }
 
@@ -261,11 +284,11 @@ export const api = {
     return [];
   },
 
-  async generateTestcases(collectionId: string, issueDescriptions: string[] = []) {
-    if (!collectionId) {
-      throw new Error("collectionId is required to generate test cases");
+  async generateTestcases(jira_project_name: string, issueDescriptions: string[] = []) {
+    if (!jira_project_name) {
+      throw new Error("Jira project name is required to generate test cases");
     }
-    const session = localStorage.getItem("jira_session");
+    const session = getSessionToken();
     if (session) {
       try {
         const body = {
@@ -273,7 +296,7 @@ export const api = {
           think: false
         };
 
-        const response = await apiCall(`/testcases?collectionId=${encodeURIComponent(collectionId)}`, {
+        const response = await apiCall(`/testcases?jira_project_name=${encodeURIComponent(jira_project_name)}`, {
           method: "POST",
           headers: {
             "x-session-token": session,
@@ -294,7 +317,7 @@ export const api = {
   async getPostmanRequests(collectionId: string): Promise<{ requests: Array<Record<string, unknown>> } | { error: string }> {
     if (!collectionId) return { error: "collectionId is required" };
 
-    const session = localStorage.getItem("jira_session");
+    const session = getSessionToken();
     if (!session) {
       return { error: "Please authenticate with Jira first (session token required)" };
     }
@@ -318,4 +341,167 @@ export const api = {
     }
   },
 
+  async adminLogin(username: string, password: string): Promise<{ session_token?: string; }> {
+    try {
+      // apiCall returns parsed JSON or throws on non-2xx
+      const data = await apiCall("/admin/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+
+      // accept multiple possible shapes: { session }, { token }, { session_token }, { data: { session } }
+      const session = data?.session || data?.token || data?.session_token || data?.sessionToken || data?.data?.session;
+      if (session) {
+        localStorage.setItem("admin_session", session);
+        return { session_token: session };
+      }
+
+      console.error("adminLogin: unexpected response shape", data);
+      throw new Error("Invalid admin credentials");
+    } catch (err) {
+      console.error("adminLogin failed", err);
+      throw err instanceof Error ? err : new Error("Failed to login as admin");
+    }
+  },
+
+  async getInfo() {
+    try {
+      const session = getSessionToken();
+      const response = await apiCall("/jira/info", {
+        method: "GET",
+        headers: session ? { "x-session-token": session } : undefined,
+      });
+      return response;
+    } catch (err) {
+      console.error("getInfo failed", err);
+      return { error: err instanceof Error ? err.message : "Failed to fetch info" };
+    }
+  },
+  async generateEndpoints(
+    testcases: string[],
+    options: {
+      collection_id?: string;
+      collection_name?: string;
+      workspace_id?: string;
+      think?: boolean;
+    } = {},
+  ) {
+    if (!Array.isArray(testcases) || testcases.length === 0) {
+      throw new Error("No testcases provided");
+    }
+    const session = getSessionToken();
+    if (!session) throw new Error("Please authenticate with Jira first (session token required)");
+    try {
+      const body = {
+        testcases,
+        collection_id: options.collection_id || "",
+        collection_name: options.collection_name || "Generated HTTP Requests",
+        workspace_id: options.workspace_id || "",
+        think: false,
+      };
+
+      const response = await apiCall(`/postman/generate-http`, {
+        method: "POST",
+        headers: {
+          "x-session-token": session,
+        },
+        body: JSON.stringify(body),
+      });
+      return response;
+    } catch (err) {
+      console.error("generateEndpoints failed", err);
+      throw err;
+    }
+  },
+
+  // Upload testcases as a JSON file (multipart/form-data)
+  async generateEndpointsFile(
+    testcases: Array<Record<string, unknown>>,
+    options: {
+      collection_id?: string;
+      collection_name?: string;
+      workspace_id?: string;
+      think?: boolean;
+    } = {},
+  ) {
+    if (!Array.isArray(testcases) || testcases.length === 0) {
+      throw new Error("No testcases provided");
+    }
+    const session = getSessionToken();
+    if (!session) throw new Error("Please authenticate with Jira first (session token required)");
+
+    try {
+      // Build payload matching the requested JSON file shape and send as JSON
+      const payload = {
+        testcases,
+        collection_id: options.collection_id || "",
+        collection_name: options.collection_name || "Generated HTTP Requests",
+        workspace_id: options.workspace_id || "",
+        think: !!options.think,
+      };
+
+      const response = await apiCall(`/postman/generate-http`, {
+        method: "POST",
+        headers: {
+          "x-session-token": session,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      return response;
+
+
+    } catch (err) {
+      console.error("generateEndpointsFile failed", err);
+      throw err;
+    }
+  },
+
+
+  async exportExcel(data: AdminTestCase[]): Promise<{ success: boolean; url?: string; error?: string }> {
+    try {
+      const session = getSessionToken();
+      if (!session) {
+        return { success: false, error: "Please authenticate with Jira first (session token required)" };
+      }
+      const response = await apiCall("/export-excel", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+      return { success: true, url: response.url };
+    } catch (err) {
+      console.error("exportExcel failed", err);
+      return { success: false, error: err instanceof Error ? err.message : "Failed to export Excel" };
+    }
+  },
+
+  async generateTestScript(collectionId: string, requestId: string, language: string, agentFramework: string) {
+    if (!collectionId || !requestId || !language || !agentFramework) {
+      throw new Error("Missing required parameters for generating test script");
+    }
+    const session = getSessionToken();
+    if (!session) {
+      throw new Error("Please authenticate with Jira first (session token required)");
+    }
+    try {
+      const body = {
+        collectionId: collectionId,
+        requestId: requestId,
+        language,
+        agentFramework: agentFramework,
+      };
+
+      const response = await apiCall("/postman/generate", {
+        method: "POST",
+        headers: {
+          "x-session-token": session,
+        },
+        body: JSON.stringify(body),
+      });
+      return response;
+    } catch (err) {
+      console.error("generateTestScript failed", err);
+      throw new Error(err instanceof Error ? err.message : "Failed to generate test script");
+    }
+  }
 };

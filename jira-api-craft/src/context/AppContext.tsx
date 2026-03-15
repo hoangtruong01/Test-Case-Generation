@@ -1,4 +1,4 @@
-import { JiraIssue, JiraProject } from "@/types/Jira";
+import { JiraIssue, JiraProject } from "@/types/jira";
 import React, { createContext, useContext, useState, ReactNode } from "react";
 
 interface Endpoint {

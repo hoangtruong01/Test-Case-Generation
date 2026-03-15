@@ -25,7 +25,7 @@ const ConfirmDialog = ({
   onConfirm,
   title = "Are you sure?",
   description = "This action cannot be undone.",
-  confirmLabel = "Delete",
+  confirmLabel = "Confirm",
   loading,
 }: ConfirmDialogProps) => (
   <AlertDialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -36,7 +36,11 @@ const ConfirmDialog = ({
       </AlertDialogHeader>
       <AlertDialogFooter>
         <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-        <AlertDialogAction onClick={onConfirm} disabled={loading} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+        <AlertDialogAction
+          onClick={onConfirm}
+          disabled={loading}
+          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        >
           {loading ? "Processing…" : confirmLabel}
         </AlertDialogAction>
       </AlertDialogFooter>

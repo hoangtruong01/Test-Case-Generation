@@ -1,6 +1,6 @@
 import { API_BASE_URL } from "@/config/apiconfig";
 
-const getSession = () => localStorage.getItem("jira_session") || "";
+const getSession = () => localStorage.getItem("admin_session") || "";
 
 const apiCall = async (endpoint: string, options: RequestInit = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
@@ -22,27 +22,18 @@ const apiCall = async (endpoint: string, options: RequestInit = {}) => {
 // ── Users ──────────────────────────────────────────
 export interface AdminUser {
   id: string;
-  username: string;
-  email: string;
-  role: "ADMIN" | "USER";
-  jiraConnected: boolean;
-  createdAt: string;
+  user: string;
+  is_token_expired: boolean;
+  is_banned: boolean;
+  last_logged_in: string;
 }
 
-export interface CreateUserPayload {
-  username: string;
-  email: string;
-  password: string;
-  role: "ADMIN" | "USER";
-}
 
 export const getUsers = () => apiCall("/admin/users");
-export const createUser = (data: CreateUserPayload) =>
-  apiCall("/admin/users", { method: "POST", body: JSON.stringify(data) });
-export const updateUser = (id: string, data: Partial<CreateUserPayload>) =>
-  apiCall(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
-export const deleteUser = (id: string) =>
-  apiCall(`/admin/users/${id}`, { method: "DELETE" });
+export const banUser = (user_id: string) =>
+  apiCall(`/admin/users/ban`, { method: "POST", body: JSON.stringify({ user_id }) });
+export const unbanUser = (user_id: string) =>
+  apiCall(`/admin/users/unban`, { method: "POST", body: JSON.stringify({ user_id }) });
 
 // ── Jira Tokens ────────────────────────────────────
 export interface JiraToken {
@@ -110,32 +101,28 @@ export const deleteTestSuite = (id: string) =>
 // ── Test Cases ─────────────────────────────────────
 export interface AdminTestCase {
   id: string;
-  testCaseName: string;
-  suiteName: string;
-  suiteId: string;
-  projectName: string;
-  httpMethod: string;
-  endpoint: string;
-  requestBody: string;
-  expectedStatus: number;
-  expectedResponse: string;
-  createdAt: string;
+  user: string;
+  jira_project_name: string;
+  created_at: string;
+  testcase_count: number;
+  testsuite: [
+    {
+      test_case_id: string;
+      title: string;
+      test_steps: [
+        {
+          step_number: number;
+          action: string;
+          test_data: string;
+        }
+      ],
+      expected_result: string;
+      actual_result: string;
+      status: string;
+    }
+  ]
 }
 
-export interface CreateTestCasePayload {
-  testCaseName: string;
-  suiteId: string;
-  httpMethod: string;
-  endpoint: string;
-  requestBody: string;
-  expectedStatus: number;
-  expectedResponse: string;
-}
 
-export const getTestCases = () => apiCall("/admin/test-cases");
-export const createTestCase = (data: CreateTestCasePayload) =>
-  apiCall("/admin/test-cases", { method: "POST", body: JSON.stringify(data) });
-export const updateTestCase = (id: string, data: Partial<CreateTestCasePayload>) =>
-  apiCall(`/admin/test-cases/${id}`, { method: "PUT", body: JSON.stringify(data) });
-export const deleteTestCase = (id: string) =>
-  apiCall(`/admin/test-cases/${id}`, { method: "DELETE" });
+
+export const getTestCases = () => apiCall("/admin/testcases");

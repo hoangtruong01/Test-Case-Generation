@@ -10,11 +10,10 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import ProjectsPage from "./pages/ProjectsPage";
 import IssuesPage from "./pages/IssuesPage";
 import PostmanPage from "./pages/PostmanPage";
-import PostmanCollectionPage from "./pages/PostmanCollectionPage";
 import SettingsPage from "./pages/SettingsPage";
 import EndpointsPage from "./pages/EndpointsPage";
+import GeneratedTestcasesPage from "./pages/GeneratedTestcasesPage";
 import NotFound from "./pages/NotFound";
-import JiraAuthPage from "./pages/JiraAuthPage";
 import UsersPage from "./pages/admin/UsersPage";
 import JiraTokensPage from "./pages/admin/JiraTokensPage";
 import AdminProjectsPage from "./pages/admin/ProjectsPage";
@@ -36,17 +35,19 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-
                 <Route path="/" element={<Landing />} />
 
                 {/* USER DASHBOARD */}
                 <Route path="/dashboard" element={<DashboardLayout />}>
                   <Route index element={<Navigate to="projects" replace />} />
                   <Route path="projects" element={<ProjectsPage />} />
-                  <Route path="projects/:projectKey" element={<IssuesPage />} />
+                  <Route path="projects/:projectName" element={<IssuesPage />} />
                   <Route path="postman" element={<PostmanPage />} />
-                  <Route path="postman/collection/:collectionId" element={<PostmanCollectionPage />} />
                   <Route path="endpoints" element={<EndpointsPage />} />
+                  <Route
+                    path="testcases"
+                    element={<GeneratedTestcasesPage />}
+                  />
                   <Route path="settings" element={<SettingsPage />} />
                 </Route>
 
@@ -72,7 +73,6 @@ const App = () => (
                 </Route>
 
                 <Route path="*" element={<NotFound />} />
-
               </Routes>
             </BrowserRouter>
           </TooltipProvider>
