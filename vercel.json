@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "cd jira-api-craft && npm install",
+  "buildCommand": "cd jira-api-craft && npm run build",
+  "outputDirectory": "jira-api-craft/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
