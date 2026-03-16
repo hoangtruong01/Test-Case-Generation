@@ -45,6 +45,12 @@ async def admin_auth(request: AdminAuthRequest) -> JSONResponse:
 
 
 async def jira_login(request: Request) -> RedirectResponse:
+    if not settings.JIRA_CLIENT_ID or not settings.JIRA_REDIRECT_URL:
+        raise HTTPException(
+            status_code=500,
+            detail="Jira OAuth is not configured. Missing JIRA_CLIENT_ID or JIRA_REDIRECT_URL."
+        )
+
     authorization_url, state = JIRA_OAUTH.create_authorization_url(
         url=JIRA_AUTH_BASE_URL,
         audience=JIRA_AUDIENCE,

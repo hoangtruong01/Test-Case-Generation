@@ -34,6 +34,19 @@ async def jira_auth_callback(request: Request):
 
 
 @router.api_route(
+    path="/jira/callback",
+    response_model=JiraAuthResponse,
+    summary="Jira Callback (compat)",
+    description="Compatibility callback path for Jira OAuth redirect",
+    responses={200: {"description": "Authorized"}},
+    methods=["GET"],
+    response_class=RedirectResponse
+)
+async def jira_auth_callback_compat(request: Request):
+    return await jira_callback(request)
+
+
+@router.api_route(
     path="/postman/connect",
     response_model=GenericResponse,
     summary="For user to enter Postman API Key",
