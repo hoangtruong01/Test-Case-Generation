@@ -16,6 +16,7 @@ def _build_allowed_origins() -> list[str]:
         "http://localhost:19006",  # Expo web
         "http://localhost:19000",  # Expo metro
         "http://localhost:8081",  # Metro default
+        "https://test-case-generation-delta.vercel.app/"
     }
 
     if settings.FRONTEND_URL:
