@@ -13,11 +13,11 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       "/jira": {
-        target: "http://localhost:8000",
+        target: "https://test-case-generation-i8wc.onrender.com",
         changeOrigin: true,
       },
       "/api": {
-        target: "http://localhost:8000",
+        target: "https://test-case-generation-i8wc.onrender.com",
         changeOrigin: true,
       },
     },
