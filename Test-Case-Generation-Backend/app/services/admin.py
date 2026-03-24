@@ -70,7 +70,9 @@ async def get_all_testcases() -> AdminTestcaseListResponse:
         db = await get_client()
         result = await (
             db.table("testcase")
-            .select("id, user, jira_project_name, created_at, testsuite")
+            .select(
+                "id, user, jira_project_name, postman_workspace, postman_collection, created_at, testsuite"
+            )
             .execute()
         )
     except Exception as e:
@@ -82,6 +84,8 @@ async def get_all_testcases() -> AdminTestcaseListResponse:
             id=row["id"],
             user=row.get("user"),
             jira_project_name=row.get("jira_project_name"),
+            postman_workspace=row.get("postman_workspace"),
+            postman_collection=row.get("postman_collection"),
             created_at=row["created_at"],
             testcase_count=len(row.get("testsuite") or []),
             testsuite=row.get("testsuite"),

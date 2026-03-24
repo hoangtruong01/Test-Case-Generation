@@ -24,8 +24,23 @@ const apiCall = async (
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || `API Error: ${response.statusText}`);
+    const error = await response.json().catch(() => ({})) as {
+      message?: string;
+      detail?: unknown;
+    };
+    const detail = error.detail;
+    let msg: string;
+    if (typeof detail === "string") msg = detail;
+    else if (Array.isArray(detail))
+      msg = detail
+        .map((d) =>
+          typeof d === "object" && d && "msg" in d
+            ? String((d as { msg: string }).msg)
+            : String(d),
+        )
+        .join("; ");
+    else msg = error.message || `API Error: ${response.statusText}`;
+    throw new Error(msg);
   }
 
   return response.json();
@@ -51,20 +66,30 @@ const getSessionExp = () => {
 };
 
 export const api = {
+  async postmanStartSession(apiKey: string): Promise<{
+    session_token: string;
+    email: string;
+    display_name: string;
+  }> {
+    if (!apiKey?.trim()) throw new Error("API key is required");
+    return apiCall("/postman/start-session", {
+      method: "POST",
+      body: JSON.stringify({ api_key: apiKey.trim() }),
+    });
+  },
+
   async postmanLoginWithApiKey(apiKey: string): Promise<{ success: boolean; token?: string; error?: string }> {
     await delay(400);
     if (!apiKey) {
       return { success: false, error: "API key is required" };
     }
-
-    // Demo acceptance: keys starting with PMAK- are valid
-    if (!apiKey.startsWith("PMAK-")) {
-      return { success: false, error: "Invalid API key" };
-    }
     try {
       const session = getSessionToken();
       if (!session) {
-        return { success: false, error: "Please authenticate with Jira first (session token required)" };
+        return {
+          success: false,
+          error: "Jira session required for this path — use Start with Postman on the main flow, or sign in with Jira first.",
+        };
       }
       const response = await apiCall("/postman/connect", {
         method: "POST",
@@ -93,15 +118,41 @@ export const api = {
     }
   },
 
-  async getPostmanCollections(): Promise<{ collections: Array<{ id: string; name: string; createdAt?: string }> } | { error: string }> {
+  async getPostmanWorkspaces(): Promise<
+    | { workspaces: Array<{ id: string; name: string; type?: string }> }
+    | { error: string }
+  > {
+    try {
+      const session = getSessionToken();
+      if (!session) {
+        return { error: "Please sign in with your Postman API key first." };
+      }
+      const response = await apiCall("/postman/workspaces", {
+        method: "GET",
+        headers: { "x-session-token": session },
+      });
+      return { workspaces: response.workspaces || [] };
+    } catch (err) {
+      console.error("getPostmanWorkspaces failed", err);
+      return {
+        error: err instanceof Error ? err.message : "Failed to load workspaces",
+      };
+    }
+  },
+
+  async getPostmanCollections(
+    workspaceId?: string,
+  ): Promise<{ collections: Array<{ id: string; name: string; createdAt?: string }> } | { error: string }> {
 
     try {
       const session = getSessionToken();
       if (!session) {
-        return { error: "Please authenticate with Jira first (session token required)" };
+        return { error: "Please sign in with your Postman API key first." };
       }
-      // Call backend endpoint with X-Api-Key header (matches provided backend swagger)
-      const response = await apiCall('/postman/collections', {
+      const qs = workspaceId
+        ? `?workspace=${encodeURIComponent(workspaceId)}`
+        : "";
+      const response = await apiCall(`/postman/collections${qs}`, {
         method: 'GET',
         headers: {
           'x-session-token': session
@@ -134,7 +185,7 @@ export const api = {
     try {
       const session = getSessionToken();
       if (!session) {
-        return { error: "Please authenticate with Jira first (session token required)" };
+        return { error: "Please sign in with your Postman API key first." };
       }
       const response = await apiCall(`/postman/collection?collectionId=${encodeURIComponent(collectionId)}`, {
         method: 'GET',
@@ -319,7 +370,7 @@ export const api = {
 
     const session = getSessionToken();
     if (!session) {
-      return { error: "Please authenticate with Jira first (session token required)" };
+      return { error: "Please sign in with your Postman API key first." };
     }
 
     try {
@@ -339,6 +390,64 @@ export const api = {
       console.error("getPostmanRequests failed", err);
       return { error: err instanceof Error ? err.message : "Failed to fetch requests" };
     }
+  },
+
+  async generateTestcasesFromPostman(payload: {
+    postman_workspace: string;
+    postman_workspace_id?: string;
+    postman_collection: string;
+    postman_collection_id: string;
+    endpoints: Array<{
+      id?: string;
+      name?: string;
+      method: string;
+      url: string;
+      description?: string;
+      body_excerpt?: string;
+      folder?: string;
+    }>;
+    think?: boolean;
+  }) {
+    const session = getSessionToken();
+    if (!session) {
+      throw new Error("Please sign in with your Postman API key first.");
+    }
+    return apiCall("/postman/testcases/generate", {
+      method: "POST",
+      headers: { "x-session-token": session },
+      body: JSON.stringify({ ...payload, think: payload.think ?? false }),
+    });
+  },
+
+  async downloadTestcasesExcel(
+    testcases: unknown[],
+    filename = "testcases.xlsx",
+  ): Promise<void> {
+    const session = getSessionToken();
+    const url = `${API_BASE_URL}/export-excel`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session ? { "x-session-token": session } : {}),
+      },
+      body: JSON.stringify(testcases),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { detail?: unknown };
+      const d = err.detail;
+      throw new Error(
+        typeof d === "string" ? d : `Excel export failed (${res.status})`,
+      );
+    }
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
   },
 
   async adminLogin(username: string, password: string): Promise<{ session_token?: string; }> {

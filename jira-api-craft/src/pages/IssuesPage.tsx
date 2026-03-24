@@ -322,6 +322,11 @@ const IssuesPage = () => {
   return (
     <>
       <div>
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <strong>Deprecated:</strong> prefer{" "}
+          <strong>From Postman</strong> for new work (endpoints → test cases →
+          Excel).
+        </div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <button

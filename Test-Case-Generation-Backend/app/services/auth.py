@@ -26,6 +26,10 @@ JIRA_OAUTH = OAuth2Client(
 ADMIN_LOGIN_MAX_ATTEMPTS = 5
 ADMIN_LOGIN_WINDOW_SECONDS = 60 * 5  # 5 minutes
 
+# Placeholder OAuth tokens for users who only sign in via Postman API key (no Jira).
+POSTMAN_ONLY_JIRA_TOKEN_PLACEHOLDER = "postman-only-no-jira-access-token"
+POSTMAN_ONLY_JIRA_REFRESH_PLACEHOLDER = "postman-only-no-jira-refresh-token"
+
 
 async def admin_auth(request: AdminAuthRequest) -> JSONResponse:
     attempts = await cache_increment("admin_login_attempts", expire_in=ADMIN_LOGIN_WINDOW_SECONDS)
@@ -146,28 +150,111 @@ async def postman_connect(session_token: str, key: str) -> Optional[bool]:
         raise HTTPException(status_code=401, detail="Invalid Postman API Key")
 
     session['postman'] = key
+    pm = user.get("user") or {}
+    pm_email = pm.get("email") or pm.get("username")
+    if pm_email and not session.get("username"):
+        session["username"] = pm_email
     await cache_set(key=session_token, value=session)
     return True
+
+
+async def postman_start_session(api_key: str) -> dict:
+    """
+    Create an ephemeral server session from a Postman API key only (no Jira).
+    Upserts public.user using the Postman account email without overwriting real Jira tokens.
+    """
+    user = await get_user(api_key)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid Postman API Key")
+
+    pm = user.get("user") or {}
+    email = pm.get("email") or pm.get("username")
+    if not email:
+        raise HTTPException(
+            status_code=422,
+            detail="Could not read an email from the Postman profile for this API key.",
+        )
+
+    display_name = pm.get("fullName") or pm.get("username") or email
+
+    db = await get_client()
+    existing = await db.table("user").select("*").eq("user", email).maybe_single().execute()
+
+    if existing and existing.data:
+        if existing.data.get("is_banned"):
+            raise HTTPException(status_code=403, detail="Account is banned")
+        await db.table("user").update({
+            "last_logged_in": datetime.now(timezone.utc).isoformat(),
+        }).eq("user", email).execute()
+    else:
+        await db.table("user").insert({
+            "user": email,
+            "access_token": POSTMAN_ONLY_JIRA_TOKEN_PLACEHOLDER,
+            "refresh_token": POSTMAN_ONLY_JIRA_REFRESH_PLACEHOLDER,
+            "is_token_expired": False,
+            "last_logged_in": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+
+    session_token = _generate_token()
+    await cache_set(
+        key=session_token,
+        value={
+            "jira": None,
+            "postman": api_key,
+            "username": email,
+        },
+    )
+    return {
+        "session_token": session_token,
+        "email": email,
+        "display_name": display_name,
+    }
 
 
 def _generate_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-async def verify_postman_session(x_session_token: str = Header(...)):
+async def _resolve_postman_session(x_session_token: str) -> tuple[dict, str, str]:
     session = await cache_get(x_session_token)
     if session is None:
         raise HTTPException(status_code=401, detail="Invalid session key")
 
-    key = session['postman']
+    key = session.get("postman")
     if key is None:
         raise HTTPException(status_code=401, detail="Missing Postman API Key")
 
-    user = await get_user(key)
-    if user is None:
+    user_resp = await get_user(key)
+    if user_resp is None:
         raise HTTPException(status_code=401, detail="Invalid Postman API Key")
 
+    username = session.get("username")
+    if not username:
+        u = user_resp.get("user") or {}
+        username = u.get("email") or u.get("username") or ""
+
+    if username:
+        db = await get_client()
+        urow = await db.table("user").select("is_banned").eq("user", username).maybe_single().execute()
+        if urow and urow.data and urow.data.get("is_banned"):
+            raise HTTPException(status_code=403, detail="Account is banned")
+
+    return session, key, username
+
+
+async def verify_postman_session(x_session_token: str = Header(...)):
+    _, key, _ = await _resolve_postman_session(x_session_token)
     return key
+
+
+async def verify_postman_session_identity(x_session_token: str = Header(...)) -> dict:
+    _, key, username = await _resolve_postman_session(x_session_token)
+    if not username:
+        raise HTTPException(
+            status_code=422,
+            detail="Session is missing a linked user email; sign in with Postman again.",
+        )
+    return {"postman_key": key, "username": username}
 
 
 async def verify_session(x_session_token: str = Header(...)):

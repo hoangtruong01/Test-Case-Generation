@@ -14,7 +14,7 @@ redis_client = redis.Redis(
     port=settings.REDIS_PORT,
     password=settings.REDIS_PASSWORD,
     decode_responses=True,
-    socket_connect_timeout=5, # Fast fail if not running
+    socket_connect_timeout=5,  # Fast fail if not running
 )
 
 # In-memory fallback for when Redis is dead
@@ -28,6 +28,7 @@ def _memory_is_expired(key: str) -> bool:
         return False
     return exp <= time.time()
 
+
 async def redis_healthcheck() -> None:
     """
     Perform a basic connectivity check against the Redis server.
@@ -39,7 +40,7 @@ async def redis_healthcheck() -> None:
     """
 
     # Perform a basic connectivity check against the Redis server
-    if await redis_client.ping():
+    if redis_client.ping():
         await redis_client.aclose()
         return
 
@@ -53,7 +54,7 @@ async def cache_get(key: str):
             return json.loads(result)
     except Exception as e:
         logger.warning(f"Redis get failed ({e}), falling back to memory.")
-    
+
     # Fallback to in-memory
     if _memory_is_expired(key):
         _memory_cache.pop(key, None)
@@ -65,6 +66,7 @@ async def cache_get(key: str):
         return json.loads(result)
     return None
 
+
 async def cache_set(
         key: str,
         value: Any,
@@ -73,7 +75,7 @@ async def cache_set(
 ) -> None:
     if isinstance(value, BaseModel):
         value = value.model_dump()
-    
+
     val_json = json.dumps(value)
 
     # Try Redis
@@ -111,7 +113,8 @@ async def cache_increment(key: str, expire_in: int) -> int:
             await redis_client.expire(key, expire_in)
         return count
     except Exception as e:
-        logger.warning(f"Redis increment failed ({e}), falling back to memory.")
+        logger.warning(
+            f"Redis increment failed ({e}), falling back to memory.")
 
     # Fallback to in-memory
     if _memory_is_expired(key):

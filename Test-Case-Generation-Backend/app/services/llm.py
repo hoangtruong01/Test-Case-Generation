@@ -1,6 +1,7 @@
 from app.core.llm import local_llm_chat_testcases
 from app.models.ollama import OllamaChatRequest
-from app.utils.utils import format_issue_descriptions
+from app.models.postman import GenerateTestcasesFromPostmanRequest
+from app.utils.utils import format_issue_descriptions, format_postman_endpoints_for_llm
 from app.core.database import get_client
 from typing import List, Dict, Any
 
@@ -61,6 +62,67 @@ async def generate_tests(
             "user": username,
             "jira_project_name": jira_project_name,
             "testsuite": testcases
+        }).execute()
+
+    return {"testcases": testcases}
+
+
+async def generate_tests_from_postman(
+    request: GenerateTestcasesFromPostmanRequest,
+    username: str,
+) -> Dict[str, Any]:
+    """Generate QA testcases from Postman endpoint definitions; persist to Supabase."""
+    if not request.endpoints:
+        raise ValueError("At least one endpoint is required")
+
+    raw_lines = [
+        {
+            "method": ep.method,
+            "url": ep.url,
+            "name": ep.name,
+            "description": ep.description,
+            "body_excerpt": ep.body_excerpt,
+            "folder": ep.folder,
+        }
+        for ep in request.endpoints
+    ]
+    requirements = format_postman_endpoints_for_llm(raw_lines)
+    formatted_requirements = await format_issue_descriptions(requirements)
+
+    result = await local_llm_chat_testcases(
+        prompt=formatted_requirements,
+        think=request.think or False,
+    )
+
+    testcases = [tc.model_dump(mode="json") for tc in result.testcases]
+
+    db = await get_client()
+
+    existing = await (
+        db.table("testcase")
+        .select("id, testsuite")
+        .eq("user", username)
+        .eq("postman_workspace", request.postman_workspace)
+        .eq("postman_collection", request.postman_collection)
+        .maybe_single()
+        .execute()
+    )
+
+    if existing and existing.data:
+        current = existing.data.get("testsuite") or []
+        await (
+            db.table("testcase")
+            .update({"testsuite": current + testcases})
+            .eq("id", existing.data["id"])
+            .execute()
+        )
+    else:
+        await db.table("testcase").insert({
+            "user": username,
+            "jira_project_name": None,
+            "postman_workspace": request.postman_workspace,
+            "postman_collection": request.postman_collection,
+            "testsuite": testcases,
         }).execute()
 
     return {"testcases": testcases}

@@ -9,7 +9,7 @@ import Landing from "./pages/Landing";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ProjectsPage from "./pages/ProjectsPage";
 import IssuesPage from "./pages/IssuesPage";
-import PostmanPage from "./pages/PostmanPage";
+import PostmanFlowPage from "./pages/PostmanFlowPage";
 import SettingsPage from "./pages/SettingsPage";
 import EndpointsPage from "./pages/EndpointsPage";
 import GeneratedTestcasesPage from "./pages/GeneratedTestcasesPage";
@@ -39,10 +39,10 @@ const App = () => (
 
                 {/* USER DASHBOARD */}
                 <Route path="/dashboard" element={<DashboardLayout />}>
-                  <Route index element={<Navigate to="projects" replace />} />
+                  <Route index element={<Navigate to="postman" replace />} />
                   <Route path="projects" element={<ProjectsPage />} />
                   <Route path="projects/:projectName" element={<IssuesPage />} />
-                  <Route path="postman" element={<PostmanPage />} />
+                  <Route path="postman" element={<PostmanFlowPage />} />
                   <Route path="endpoints" element={<EndpointsPage />} />
                   <Route
                     path="testcases"

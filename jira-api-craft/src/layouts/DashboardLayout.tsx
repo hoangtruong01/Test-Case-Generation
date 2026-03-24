@@ -23,14 +23,15 @@ import {
 import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
-  { to: "/dashboard/projects", label: "Projects", icon: FolderKanban },
-  { to: "/dashboard/postman", label: "Postman", icon: Send },
-  { to: "/dashboard/endpoints", label: "Endpoints", icon: Webhook },
+  { to: "/dashboard/postman", label: "From Postman", icon: Send },
+  { to: "/dashboard/testcases", label: "Test cases", icon: FlaskConical },
+  { to: "/dashboard/projects", label: "Jira (deprecated)", icon: FolderKanban },
+  { to: "/dashboard/endpoints", label: "Browse endpoints", icon: Webhook },
   { to: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 const DashboardLayout = () => {
-  const { user, logout } = useAuth();
+  const { dashboardUser, logout } = useAuth();
   const { isDark, toggle } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -98,11 +99,11 @@ const DashboardLayout = () => {
         <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3 px-3 py-2">
             <div className="w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-xs font-bold text-primary-foreground">
-              {user?.name?.charAt(0) || "U"}
+              {dashboardUser?.name?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user?.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+              <p className="text-sm font-medium text-foreground truncate">{dashboardUser?.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{dashboardUser?.email}</p>
             </div>
           </div>
         </div>

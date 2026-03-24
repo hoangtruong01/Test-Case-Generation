@@ -6,10 +6,10 @@ import { Zap, ArrowRight, GitBranch, Webhook, Send, Shield, LogIn } from "lucide
 import { API_BASE_URL } from "@/config/apiconfig";
 
 const features = [
-  { icon: GitBranch, title: "Jira Integration", desc: "Connect your Jira projects and fetch issues automatically" },
-  { icon: Webhook, title: "AI-Powered APIs", desc: "Generate REST API endpoints from your user stories using LLM" },
-  { icon: Send, title: "Postman Export", desc: "Create Postman collections with auto-generated test scripts" },
-  { icon: Shield, title: "Smart Testing", desc: "AI generates comprehensive test scripts like Postbot" },
+  { icon: Send, title: "Postman-first", desc: "Select workspace, collection, and endpoints — AI builds your testsuite" },
+  { icon: Webhook, title: "Monitoring", desc: "Runs are recorded in Supabase for your team" },
+  { icon: GitBranch, title: "Jira (deprecated)", desc: "Legacy flow: issues to tests — still available from the dashboard" },
+  { icon: Shield, title: "Export", desc: "Download a standard testsuite Excel file when you're done" },
 ];
 
 const Landing = () => {
@@ -22,11 +22,7 @@ const Landing = () => {
 
 
 const handleGetStarted = () => {
-  if (isJiraAuthenticated) {
-    navigate("/dashboard/projects");
-  } else {
-    window.location.href = `${API_BASE_URL}/jira/login`;
-  }
+  navigate("/dashboard/postman");
 };
 
   return (
@@ -63,7 +59,7 @@ const handleGetStarted = () => {
               onClick={handleGetStarted}
               className="px-4 py-2 text-sm font-medium rounded-lg gradient-bg text-primary-foreground hover:opacity-90 transition-opacity"
             >
-              {isJiraAuthenticated ? "Go to Dashboard" : "Get Started"}
+              Open app
             </button>
           </div>
         </header>
@@ -81,36 +77,37 @@ const handleGetStarted = () => {
             </div>
 
             <h1 className="text-4xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6">
-              From Jira Issues to{" "}
-              <span className="gradient-text">Tested APIs</span>
-              {" "}in Minutes
+              From{" "}
+              <span className="gradient-text">Postman APIs </span>
+              to Test Suites in Minutes
             </h1>
 
             <p className="text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-              Connect your Jira, let AI generate API endpoints from your stories,
-              and export production-ready Postman collections with smart test scripts.
+              Paste your Postman API key, pick requests from any workspace and collection,
+              generate structured test cases, save them for monitoring, and export Excel.
             </p>
 
             {/* Connection Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
               <button
+                onClick={handleGetStarted}
+                className="group px-8 py-3.5 rounded-xl font-semibold text-base transition-all flex items-center gap-2 gradient-bg text-primary-foreground hover:opacity-90 glow-shadow"
+              >
+                <Send className="w-4 h-4" />
+                Start with Postman
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+              <button
                 onClick={handleJiraConnect}
                 disabled={isJiraAuthenticated}
-                className={`group px-8 py-3.5 rounded-xl font-semibold text-base transition-all flex items-center gap-2 ${
-                  isJiraAuthenticated 
-                    ? 'bg-primary/10 text-primary border border-primary/20 cursor-default' 
-                    : 'gradient-bg text-primary-foreground hover:opacity-90 glow-shadow'
+                className={`group px-8 py-3.5 rounded-xl font-semibold text-base transition-all flex items-center gap-2 border border-border ${
+                  isJiraAuthenticated
+                    ? "opacity-60 cursor-default"
+                    : "hover:bg-muted"
                 }`}
               >
-                {isJiraAuthenticated ? (
-                  <>Connected to Jira ✓</>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    Connect with Jira
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
+                <LogIn className="w-4 h-4" />
+                {isJiraAuthenticated ? "Jira connected" : "Jira (deprecated)"}
               </button>
             </div>
 

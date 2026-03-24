@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
-from app.services.auth import jira_login, jira_callback, postman_connect, verify_session
-from app.models.schemas import JiraAuthResponse, PostmanAPIKeyRequest, GenericResponse
+from app.services.auth import jira_login, jira_callback, postman_connect, postman_start_session, verify_session
+from app.models.schemas import JiraAuthResponse, PostmanAPIKeyRequest, PostmanSessionResponse, GenericResponse
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import Request
 
@@ -44,6 +44,27 @@ async def jira_auth_callback(request: Request):
 )
 async def jira_auth_callback_compat(request: Request):
     return await jira_callback(request)
+
+
+@router.api_route(
+    path="/postman/start-session",
+    response_model=PostmanSessionResponse,
+    summary="Start session with Postman API key only",
+    description=(
+        "Creates an ephemeral server session from a Postman API key without Jira. "
+        "Registers or updates the user row using the Postman account email."
+    ),
+    responses={
+        200: {"model": PostmanSessionResponse},
+        401: {"model": GenericResponse},
+        422: {"model": GenericResponse},
+    },
+    methods=["POST"],
+    response_class=JSONResponse,
+)
+async def postman_start_session_route(request: PostmanAPIKeyRequest):
+    data = await postman_start_session(request.api_key)
+    return JSONResponse(content=data)
 
 
 @router.api_route(

@@ -103,3 +103,22 @@ class GenerateHttpRequestsRequest(BaseModel):
     collection_name: Optional[str] = "Generated HTTP Requests"
     workspace_id: Optional[str] = None
     think: Optional[bool] = False
+
+
+class PostmanEndpointForTests(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    method: str
+    url: str
+    description: Optional[str] = None
+    body_excerpt: Optional[str] = None
+    folder: Optional[str] = None
+
+
+class GenerateTestcasesFromPostmanRequest(BaseModel):
+    postman_workspace: str
+    postman_workspace_id: Optional[str] = None
+    postman_collection: str
+    postman_collection_id: str
+    endpoints: List[PostmanEndpointForTests]
+    think: Optional[bool] = False

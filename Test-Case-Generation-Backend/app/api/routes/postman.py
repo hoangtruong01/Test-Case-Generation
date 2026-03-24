@@ -1,13 +1,43 @@
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from app.core.postman import get_all_collections, get_collection, get_all_request, postbot_generate, get_user
+from app.core.postman import (
+    get_all_collections,
+    get_collection,
+    get_all_request,
+    postbot_generate,
+    list_workspace_summaries,
+)
 from app.services.postman import generate_all_test_scripts, generate_http_requests
-from app.services.auth import verify_postman_session
+from app.services.auth import verify_postman_session, verify_postman_session_identity
+from app.services.llm import generate_tests_from_postman
 from app.models.schemas import GenericResponse
-from app.models.postman import PostmanTestScriptRequest, PostmanTestScriptsRequest, PostmanRequest, PostmanCollectionShort, GenerateHttpRequestsRequest
-from typing import List
+from app.models.postman import (
+    PostmanTestScriptRequest,
+    PostmanTestScriptsRequest,
+    PostmanRequest,
+    PostmanCollectionShort,
+    GenerateHttpRequestsRequest,
+    GenerateTestcasesFromPostmanRequest,
+)
+from typing import List, Optional
 
 router = APIRouter()
+
+
+@router.api_route(
+    path="/workspaces",
+    summary="List Postman workspaces",
+    description="Returns workspaces visible to this API key (for filtering collections).",
+    responses={
+        200: {"description": "Workspaces returned"},
+        401: {"model": GenericResponse},
+    },
+    methods=["GET"],
+    response_class=JSONResponse,
+)
+async def list_workspaces(session=Depends(verify_postman_session)):
+    rows = await list_workspace_summaries(session)
+    return JSONResponse(content={"workspaces": rows})
 
 
 @router.api_route(
@@ -46,8 +76,14 @@ async def postman_me(session: str = Depends(verify_postman_session)):
     methods=["GET"],
     response_class=JSONResponse,
 )
-async def all_collections(session=Depends(verify_postman_session)):
-    collections = await get_all_collections(session)
+async def all_collections(
+    workspace: Optional[str] = Query(
+        default=None,
+        description="Postman workspace UID; when set, only collections in that workspace are returned",
+    ),
+    session=Depends(verify_postman_session),
+):
+    collections = await get_all_collections(session, workspace_id=workspace)
 
     return collections
 
@@ -78,11 +114,12 @@ async def collection(
 @router.api_route(
     path="/generate",
     # response_model=GenericResponse,
-    summary="Generate test script by specific request ID and collection ID",
-    description="",
+    summary="Deprecated: Postbot test script for one request",
+    description="Deprecated — use the testcase generation flow instead. Generate test script by specific request ID and collection ID.",
     responses={200: {"description": "Successfully generated"}},
     methods=["POST"],
     response_class=JSONResponse,
+    deprecated=True,
 )
 async def testscript(request: PostmanTestScriptRequest, session: str = Depends(verify_postman_session)):
 
@@ -102,11 +139,12 @@ async def testscript(request: PostmanTestScriptRequest, session: str = Depends(v
 @router.api_route(
     path="/generate-all",
     response_model=List[PostmanRequest],
-    summary="Generate all test script for all requests of a collection",
-    description="",
+    summary="Deprecated: Postbot scripts for all requests in a collection",
+    description="Deprecated — use the testcase generation flow instead.",
     responses={200: {"description": "Successfully generated"}},
     methods=["POST"],
     response_class=JSONResponse,
+    deprecated=True,
 )
 async def testscripts(request: PostmanTestScriptsRequest, session=Depends(verify_postman_session)):
     collections = await generate_all_test_scripts(
@@ -137,12 +175,38 @@ async def request(collectionId: str, session=Depends(verify_postman_session)):
 
 
 @router.api_route(
-    path="/generate-http",
-    summary="Generate HTTP Requests from Testcases",
+    path="/testcases/generate",
+    summary="Generate test cases from selected Postman endpoints",
     description=(
+        "Runs the testcase LLM on the selected API operations, merges into Supabase for monitoring, "
+        "and returns the new testcase objects."
+    ),
+    responses={
+        200: {"description": "Testcases generated"},
+        401: {"model": GenericResponse},
+        422: {"model": GenericResponse},
+    },
+    methods=["POST"],
+    response_class=JSONResponse,
+)
+async def generate_testcases_from_postman_route(
+    request: GenerateTestcasesFromPostmanRequest,
+    session_identity: dict = Depends(verify_postman_session_identity),
+):
+    try:
+        out = await generate_tests_from_postman(request, session_identity["username"])
+        return JSONResponse(content=out)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.api_route(
+    path="/generate-http",
+    summary="Deprecated: push LLM-derived HTTP requests into a collection",
+    description=(
+        "Deprecated — primary flow is Postman → test cases → Excel. "
         "Uses the local LLM to derive HTTP requests from the provided testcases, "
-        "then inserts them into a Postman collection. "
-        "If no collection_id is provided, a new collection is created automatically."
+        "then inserts them into a Postman collection."
     ),
     responses={
         200: {"description": "HTTP requests generated and inserted into Postman collection"},
@@ -151,6 +215,7 @@ async def request(collectionId: str, session=Depends(verify_postman_session)):
     },
     methods=["POST"],
     response_class=JSONResponse,
+    deprecated=True,
 )
 async def generate_http(request: GenerateHttpRequestsRequest, session: str = Depends(verify_postman_session)):
     result = await generate_http_requests(

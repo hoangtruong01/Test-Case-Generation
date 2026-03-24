@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 import httpx
 
 
@@ -19,13 +19,19 @@ def _get_headers(key: str) -> Dict[str, str]:
     }
 
 
-async def get_all_collections(key: str):
+async def get_all_collections(key: str, workspace_id: Optional[str] = None):
+    params: Dict[str, str] = {}
+    if workspace_id:
+        params["workspace"] = workspace_id
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(
             url=POSTMAN_URLS['collections'],
-            headers=_get_headers(key)
+            headers=_get_headers(key),
+            params=params or None,
         )
-    return response.json()['collections']
+    response.raise_for_status()
+    body = response.json()
+    return body.get("collections") or []
 
 
 async def get_collection(collection_id: str, key: str):
@@ -38,13 +44,45 @@ async def get_collection(collection_id: str, key: str):
 
 
 async def get_all_workspaces(key: str):
-
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.get(
             POSTMAN_URLS['workspaces'],
             headers=_get_headers(key)
         )
+    response.raise_for_status()
     return response.json()
+
+
+def flatten_collection_requests(items: List[Dict[str, Any]], folder_path: str = "") -> List[Dict[str, Any]]:
+    """Flatten nested Postman collection folders into a list of request items."""
+    out: List[Dict[str, Any]] = []
+    for it in items or []:
+        name = (it.get("name") or "").strip()
+        if it.get("request") is not None:
+            clone = {k: v for k, v in it.items() if k != "item"}
+            if folder_path:
+                clone["_folder"] = folder_path
+            out.append(clone)
+            continue
+        sub_items = it.get("item")
+        if isinstance(sub_items, list) and sub_items:
+            sub = f"{folder_path}/{name}" if folder_path else name
+            out.extend(flatten_collection_requests(sub_items, sub))
+    return out
+
+
+async def list_workspace_summaries(key: str) -> List[Dict[str, Any]]:
+    data = await get_all_workspaces(key)
+    raw = data.get("workspaces") or []
+    return [
+        {
+            "id": w.get("id"),
+            "name": w.get("name") or w.get("id"),
+            "type": w.get("type"),
+        }
+        for w in raw
+        if w.get("id")
+    ]
 
 
 async def create_collection(name: str, key: str, items: list = None, workspace_id: str = None) -> str:
@@ -97,7 +135,8 @@ async def get_all_requestIds(collection_id: str, key: str):
 
 async def get_all_request(collection_id: str, key: str):
     collection = await get_collection(collection_id=collection_id, key=key)
-    return list(collection["collection"]["item"])
+    items = collection.get("collection", {}).get("item") or []
+    return flatten_collection_requests(items)
 
 
 async def get_user(key: str):

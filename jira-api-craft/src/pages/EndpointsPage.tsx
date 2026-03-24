@@ -91,13 +91,6 @@ const EndpointsPage = () => {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
-    null,
-  );
-  const [scriptModalOpen, setScriptModalOpen] = useState(false);
-  const [scriptLanguage, setScriptLanguage] = useState<string>("python");
-  const [scriptFramework, setScriptFramework] = useState<string>("openai");
-  const [scriptResult, setScriptResult] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   // Load collections on mount
@@ -212,6 +205,11 @@ const EndpointsPage = () => {
 
     return (
       <div className="max-w-4xl mx-auto">
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          Read-only browser. Postbot test-script generation is deprecated. Use{" "}
+          <strong>From Postman</strong> in the sidebar to generate test cases and
+          export Excel.
+        </div>
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-foreground">API Endpoints</h1>
           <p className="text-muted-foreground text-sm mt-1">
@@ -268,6 +266,9 @@ const EndpointsPage = () => {
   // --- Endpoints View ---
   return (
     <div className="max-w-5xl mx-auto">
+      <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        Postbot &quot;Generate test script&quot; has been removed from this UI (deprecated).
+      </div>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
@@ -286,15 +287,6 @@ const EndpointsPage = () => {
                 ? "Loading..."
                 : `${filtered.length} endpoint${filtered.length !== 1 ? "s" : ""}`}
             </p>
-          </div>
-          <div className="ml-4">
-            <button
-              onClick={() => setScriptModalOpen(true)}
-              disabled={!selectedRequestId}
-              className="ml-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground disabled:opacity-50"
-            >
-              Generate Test Script
-            </button>
           </div>
         </div>
       </div>
@@ -323,42 +315,6 @@ const EndpointsPage = () => {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-4 pr-4 py-2.5 rounded-lg border border-border bg-card text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
             />
-          </div>
-
-          {/* Select dropdown to choose an endpoint */}
-          <div className="mb-4">
-            <label className="text-xs text-muted-foreground mb-1 block">
-              Select endpoint
-            </label>
-            <select
-              value={selectedRequestId || ""}
-              onChange={(e) => {
-                const id = e.target.value || null;
-                setSelectedRequestId(id);
-                setExpandedId(id);
-                // optionally scroll into view after a tick
-                setTimeout(() => {
-                  const el = document.querySelector(`[data-req-id=\"${id}\"]`);
-                  if (
-                    el &&
-                    typeof (el as HTMLElement).scrollIntoView === "function"
-                  ) {
-                    (el as HTMLElement).scrollIntoView({
-                      behavior: "smooth",
-                      block: "center",
-                    });
-                  }
-                }, 50);
-              }}
-              className="w-full px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
-            >
-              <option value="">-- choose an endpoint --</option>
-              {filtered.map((r, idx) => (
-                <option key={r.id || `opt-${idx}`} value={r.id || `req-${idx}`}>
-                  {`${(r.request?.method || "").toUpperCase()} — ${r.name || resolveUrl(r.request?.url) || "No URL"}`}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Endpoints list */}
@@ -498,196 +454,6 @@ const EndpointsPage = () => {
             )}
           </div>
         </>
-      )}
-
-      {/* Script modal */}
-      {scriptModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md p-6 bg-background rounded-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Generate Test Script</h3>
-              <button
-                onClick={() => setScriptModalOpen(false)}
-                className="px-3 py-1 rounded-md border border-border"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Collection ID
-                </label>
-                <div className="text-sm text-foreground mt-1">
-                  {selectedCollection?.id}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Request ID
-                </label>
-                <div className="text-sm text-foreground mt-1">
-                  {selectedRequestId || "(none)"}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Language
-                </label>
-                <select
-                  value={scriptLanguage}
-                  onChange={(e) => setScriptLanguage(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
-                >
-                  <option value="python">Python</option>
-                  <option value="javascript">JavaScript</option>
-                  <option value="typescript">TypeScript</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground">
-                  Agent Framework
-                </label>
-                <select
-                  value={scriptFramework}
-                  onChange={(e) => setScriptFramework(e.target.value)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm"
-                >
-                  <option value="openai">OPENAI</option>
-                  <option value="mistral">MISTRAL</option>
-                  <option value="gemini">GEMINI</option>
-                  <option value="anthropic">ANTHROPIC</option>
-                  <option value="langchain">LANGCHAIN</option>
-                  <option value="autogen">AUTOGEN</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-2 mt-4">
-                <button
-                  onClick={() => setScriptModalOpen(false)}
-                  className="px-4 py-2 rounded bg-muted"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!selectedCollection || !selectedRequestId) {
-                      toast.error("Select a request first");
-                      return;
-                    }
-                    try {
-                      const payload = {
-                        collection_id: selectedCollection.id,
-                        request_id: selectedRequestId,
-                        language: scriptLanguage,
-                        framework: scriptFramework,
-                      };
-                      console.log("generateTestScript -> payload", payload);
-                      console.log(
-                        "generateTestScript helper exists",
-                        typeof (api as any).generateTestScript === "function",
-                      );
-                      setScriptModalOpen(false);
-                      if ((api as any).generateTestScript) {
-                        const fn: any = (api as any).generateTestScript;
-                        let res: any = null;
-                        if (fn.length === 1) {
-                          res = await fn(payload);
-                        } else {
-                          res = await fn(
-                            payload.collection_id,
-                            payload.request_id,
-                            payload.language,
-                            payload.framework,
-                          );
-                        }
-                        // show returned script if present
-                        const text =
-                          res?.data?.text || res?.text || res?.script || null;
-                        if (text && typeof text === "string")
-                          setScriptResult(text);
-                        toast.success("Script generation requested");
-                      } else {
-                        console.log("generateTestScript payload:", payload);
-                        toast.success(
-                          "Script request prepared (no API in client)",
-                        );
-                      }
-                    } catch (err) {
-                      console.error(err);
-                      toast.error("Failed to request script generation");
-                    }
-                  }}
-                  className="px-4 py-2 rounded bg-primary text-primary-foreground"
-                >
-                  Generate
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Script result modal */}
-      {scriptResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-3xl p-6 bg-background rounded-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Generated Script</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(scriptResult);
-                      toast.success("Copied script to clipboard");
-                    } catch {
-                      toast.error("Failed to copy");
-                    }
-                  }}
-                  className="px-3 py-1 rounded bg-muted"
-                >
-                  Copy
-                </button>
-                <button
-                  onClick={() => {
-                    const ext =
-                      scriptLanguage === "javascript"
-                        ? "js"
-                        : scriptLanguage === "typescript"
-                          ? "ts"
-                          : "py";
-                    const blob = new Blob([scriptResult], {
-                      type: "text/plain;charset=utf-8",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `generated_script.${ext}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    a.remove();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className="px-3 py-1 rounded bg-muted"
-                >
-                  Download
-                </button>
-                <button
-                  onClick={() => setScriptResult(null)}
-                  className="px-3 py-1 rounded-md border border-border"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <pre className="p-4 rounded bg-muted text-sm font-mono overflow-auto max-h-[60vh]">
-              {scriptResult}
-            </pre>
-          </div>
-        </div>
       )}
     </div>
   );

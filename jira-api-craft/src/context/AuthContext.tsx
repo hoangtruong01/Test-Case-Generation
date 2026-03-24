@@ -13,19 +13,32 @@ interface User {
   avatar?: string;
 }
 
+const AUTH_SOURCE_KEY = "auth_session_source";
+const POSTMAN_PROFILE_KEY = "postman_session_profile";
+
 interface AuthContextType {
   // Jira Authentication
   jiraUser: User | null;
   jiraAccessToken: string | null;
   isJiraAuthenticated: boolean;
-  loginJira: ( token: string) => void;
+  loginJira: (token: string, expiresInSeconds?: number) => void;
   logoutJira: () => void;
 
+  /** Postman API key stored locally (optional; session uses backend cache). */
   postmanAccessToken: string | null;
   setPostmanAccessToken: (token: string | null) => void;
   isPostmanAuthenticated: boolean;
   loginPostman: (user: User, token: string) => void;
   logoutPostman: () => void;
+
+  /** Backend session created via POST /postman/start-session (no Jira). */
+  postmanSessionProfile: User | null;
+  isPostmanBackendSession: boolean;
+  loginPostmanBackendSession: (
+    sessionToken: string,
+    profile: User,
+    expiresInSeconds?: number,
+  ) => void;
 
   // Legacy (keep for backward compatibility)
   user: User | null;
@@ -33,6 +46,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (user: User, token: string) => void;
   logout: () => void;
+
+  dashboardUser: User | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,12 +56,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [jiraUser, setJiraUser] = useState<User | null>(() => {
     try {
       if (typeof window === "undefined") return null;
+      if (localStorage.getItem(AUTH_SOURCE_KEY) === "postman") return null;
       const s = localStorage.getItem("jira_user");
       return s ? (JSON.parse(s) as User) : null;
     } catch (e) {
       return null;
     }
   });
+
+  const [postmanSessionProfile, setPostmanSessionProfile] =
+    useState<User | null>(() => {
+      try {
+        if (typeof window === "undefined") return null;
+        if (localStorage.getItem(AUTH_SOURCE_KEY) !== "postman") return null;
+        const raw = localStorage.getItem(POSTMAN_PROFILE_KEY);
+        return raw ? (JSON.parse(raw) as User) : null;
+      } catch {
+        return null;
+      }
+    });
+
+  const [sessionSource, setSessionSource] = useState<"jira" | "postman" | null>(
+    () => {
+      try {
+        if (typeof window === "undefined") return null;
+        const s = localStorage.getItem(AUTH_SOURCE_KEY);
+        if (s === "postman" || s === "jira") return s;
+        if (localStorage.getItem("jira_user")) return "jira";
+        return null;
+      } catch {
+        return null;
+      }
+    },
+  );
   const [jiraAccessToken, setJiraAccessToken] = useState<string | null>(() => {
     try {
       if (typeof window === "undefined") return null;
@@ -102,6 +144,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const fetchInfo = async () => {
       try {
+        if (typeof window !== "undefined") {
+          if (localStorage.getItem(AUTH_SOURCE_KEY) === "postman") return;
+        }
         if (!jiraAccessToken || jiraUser) return;
         const info = await api.getInfo();
         if (info && !info.error) {
@@ -137,9 +182,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [jiraAccessToken, jiraUser]);
 
   const loginJira = useCallback(
-    ( token: string, expiresInSeconds: number = 3600) => {
+    (token: string, expiresInSeconds: number = 3600) => {
       try {
         if (typeof window !== "undefined") {
+          localStorage.setItem(AUTH_SOURCE_KEY, "jira");
+          localStorage.removeItem(POSTMAN_PROFILE_KEY);
           localStorage.setItem("jira_token", token);
           const exp = Date.now() + expiresInSeconds * 1000;
           localStorage.setItem("jira_token_exp", String(exp));
@@ -147,7 +194,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (e) {
         /* ignore */
       }
+      setPostmanSessionProfile(null);
+      setSessionSource("jira");
       setJiraAccessToken(token);
+      setJiraTokenExp(Date.now() + expiresInSeconds * 1000);
+    },
+    [],
+  );
+
+  const loginPostmanBackendSession = useCallback(
+    (sessionToken: string, profile: User, expiresInSeconds: number = 604800) => {
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem(AUTH_SOURCE_KEY, "postman");
+          localStorage.setItem(POSTMAN_PROFILE_KEY, JSON.stringify(profile));
+          localStorage.setItem("jira_token", sessionToken);
+          localStorage.setItem(
+            "jira_token_exp",
+            String(Date.now() + expiresInSeconds * 1000),
+          );
+          localStorage.removeItem("jira_user");
+        }
+      } catch (e) {
+        /* ignore */
+      }
+      setJiraUser(null);
+      setPostmanSessionProfile(profile);
+      setSessionSource("postman");
+      setJiraAccessToken(sessionToken);
       setJiraTokenExp(Date.now() + expiresInSeconds * 1000);
     },
     [],
@@ -161,11 +235,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.removeItem("jira_session");
         localStorage.removeItem("jira_token_exp");
         localStorage.removeItem("jira_session_exp");
+        localStorage.removeItem(AUTH_SOURCE_KEY);
+        localStorage.removeItem(POSTMAN_PROFILE_KEY);
       }
     } catch (e) {
       /* ignore */
     }
     setJiraUser(null);
+    setPostmanSessionProfile(null);
+    setSessionSource(null);
     setJiraAccessToken(null);
     setJiraTokenExp(null);
   }, []);
@@ -216,6 +294,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     logoutPostman();
   }, [logoutJira, logoutPostman]);
 
+  const isPostmanBackendSession =
+    sessionSource === "postman" &&
+    !!jiraAccessToken &&
+    (jiraTokenExp ? jiraTokenExp > Date.now() : true);
+
+  const dashboardUser = jiraUser ?? postmanSessionProfile;
+
   return (
     <AuthContext.Provider
       value={{
@@ -236,12 +321,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loginPostman,
         logoutPostman,
 
+        postmanSessionProfile,
+        isPostmanBackendSession,
+        loginPostmanBackendSession,
+
         // Legacy
         user: jiraUser,
         accessToken: jiraAccessToken,
         isAuthenticated: !!jiraUser,
         login,
         logout,
+
+        dashboardUser,
       }}
     >
       {children}

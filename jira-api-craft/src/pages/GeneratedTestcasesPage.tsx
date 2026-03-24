@@ -2,17 +2,7 @@ import React, { useState } from "react";
 import { useAppContext } from "@/context/AppContext";
 import { api } from "@/services/api";
 import { useNavigate } from "react-router-dom";
-import PostmanCollectionPicker from "@/components/PostmanCollectionPicker";
 import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
 import { ArrowLeft } from "lucide-react";
 
 const GeneratedTestcasesPage = () => {
@@ -20,10 +10,6 @@ const GeneratedTestcasesPage = () => {
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(
     new Set(),
-  );
-  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
-  const [pendingTestcases, setPendingTestcases] = useState<string[] | null>(
-    null,
   );
   const navigate = useNavigate();
 
@@ -43,6 +29,38 @@ const GeneratedTestcasesPage = () => {
       else next.add(id);
       return next;
     });
+  };
+
+  const collectSelectedRaw = (): unknown[] => {
+    const all = generatedTestcases || [];
+    const pick = selectedIds.size === 0 ? null : selectedIds;
+    const out: unknown[] = [];
+    all.forEach((tc: any) => {
+      if (tc.tests && Array.isArray(tc.tests)) {
+        tc.tests.forEach((t: any) => {
+          const id = t.test_case_id || t.id || "";
+          if (pick === null || pick.has(id)) out.push(t);
+        });
+      } else {
+        const id = tc.test_case_id || tc.id || "";
+        if (pick === null || pick.has(id)) out.push(tc);
+      }
+    });
+    return out;
+  };
+
+  const exportExcel = async () => {
+    const rows = collectSelectedRaw();
+    if (rows.length === 0) {
+      toast.error("No test cases to export");
+      return;
+    }
+    try {
+      await api.downloadTestcasesExcel(rows);
+      toast.success("Downloaded testcases.xlsx");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Excel export failed");
+    }
   };
 
   const exportSelectedAsCsv = () => {
@@ -116,91 +134,6 @@ const GeneratedTestcasesPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleGenerateEndpoint = async () => {
-    const all = generatedTestcases || [];
-    const pick = new Set(selectedIds);
-    const testcasesAsStrings: string[] = [];
-
-    all.forEach((tc: any) => {
-      if (tc.tests && Array.isArray(tc.tests)) {
-        tc.tests.forEach((t: any) => {
-          const id = t.test_case_id || t.id || "";
-          if (selectedIds.size === 0 || pick.has(id)) {
-            const stepsArr = t.test_steps || t.steps || [];
-            const steps = Array.isArray(stepsArr)
-              ? stepsArr.map((s: any) => (s && s.action) || s)
-              : [];
-            const payloadObj = {
-              title: t.title || t.name || t.test_case_id || "",
-              description: t.description || t.summary || "",
-              test_steps: steps,
-            };
-            testcasesAsStrings.push(JSON.stringify(payloadObj));
-          }
-        });
-      } else {
-        const id = tc.test_case_id || tc.id || "";
-        if (selectedIds.size === 0 || pick.has(id)) {
-          const stepsArr = tc.test_steps || tc.steps || [];
-          const steps = Array.isArray(stepsArr)
-            ? stepsArr.map((s: any) => (s && s.action) || s)
-            : [];
-          const payloadObj = {
-            title: tc.title || tc.name || tc.test_case_id || "",
-            description: tc.description || tc.summary || "",
-            test_steps: steps,
-          };
-          testcasesAsStrings.push(JSON.stringify(payloadObj));
-        }
-      }
-    });
-
-    if (testcasesAsStrings.length === 0) {
-      alert("No testcases selected to generate endpoints");
-      return;
-    }
-    // Open collection picker (PostmanCollectionPicker will show connect CTA if needed)
-    setPendingTestcases(testcasesAsStrings);
-    setShowCollectionPicker(true);
-  };
-
-  const handleCollectionSelect = async (
-    collectionId: string,
-    collectionName?: string,
-  ) => {
-    const tcs = pendingTestcases || [];
-    if (tcs.length === 0) {
-      toast.error("No testcases to send");
-      setShowCollectionPicker(false);
-      return;
-    }
-    try {
-      // parse JSON strings into objects and upload as a JSON file
-      const parsed = tcs.map((s) => {
-        try {
-          return JSON.parse(s as string);
-        } catch (_) {
-          return { raw: s };
-        }
-      });
-
-      await api.generateEndpointsFile(parsed, {
-        collection_id: collectionId,
-        collection_name: collectionName || "Generated HTTP Requests",
-        think: false,
-      });
-      toast.success("GenerateEndpoint request sent");
-      setShowCollectionPicker(false);
-      // Navigate to endpoints page and pass collectionId as query param
-      navigate(
-        `/dashboard/endpoints?collectionId=${encodeURIComponent(collectionId)}`,
-      );
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to send GenerateEndpoint request");
-    }
-  };
-
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between gap-3 mb-6">
@@ -213,61 +146,23 @@ const GeneratedTestcasesPage = () => {
           </button>
           <h1 className="text-2xl font-bold">Generated Testcases</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
+            type="button"
+            onClick={() => void exportExcel()}
+            className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-sm"
+          >
+            Export Excel
+          </button>
+          <button
+            type="button"
             onClick={exportSelectedAsCsv}
             className="px-3 py-1 rounded-lg border hover:bg-muted text-sm"
           >
-            Export
-          </button>
-          <button
-            onClick={handleGenerateEndpoint}
-            className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-sm"
-          >
-            Generate Endpoint
+            Export CSV
           </button>
         </div>
       </div>
-
-      <AlertDialog
-        open={showCollectionPicker}
-        onOpenChange={(v) => {
-          if (!v) {
-            setShowCollectionPicker(false);
-            setPendingTestcases(null);
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Select a Postman Collection</AlertDialogTitle>
-            <AlertDialogDescription>
-              Choose the collection to push generated testcases into.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <div className="mt-3">
-            <PostmanCollectionPicker
-              onSelect={handleCollectionSelect}
-              selectedId={null}
-              issues={[]}
-              onHandleGenerate={async () => {}}
-              showTitle={false}
-            />
-          </div>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                setShowCollectionPicker(false);
-                setPendingTestcases(null);
-              }}
-            >
-              Cancel
-            </AlertDialogCancel>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {generatedTestcases.length === 0 ? (
         <div className="text-muted-foreground">No generated testcases yet.</div>

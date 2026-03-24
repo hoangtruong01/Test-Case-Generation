@@ -81,6 +81,32 @@ async def snake_case_to_title(fields: Iterable[str]) -> List[str]:
     return result
 
 
+def format_postman_endpoints_for_llm(endpoints: List[Any]) -> List[str]:
+    """
+    Turn selected Postman requests into requirement strings for testcase generation.
+    """
+    lines: List[str] = []
+    for ep in endpoints:
+        method = (ep.get("method") or "GET").upper()
+        url = ep.get("url") or ""
+        name = (ep.get("name") or "").strip()
+        desc = (ep.get("description") or "").strip()
+        folder = (ep.get("folder") or "").strip()
+        body = (ep.get("body_excerpt") or "").strip()
+        parts = [f"{method} {url}"]
+        if name:
+            parts.append(name)
+        if folder:
+            parts.append(f"(folder: {folder})")
+        if desc:
+            parts.append(desc)
+        if body:
+            excerpt = body[:1200] + ("…" if len(body) > 1200 else "")
+            parts.append(f"Body excerpt: {excerpt}")
+        lines.append(" — ".join(parts))
+    return lines
+
+
 async def format_issue_descriptions(issue_descriptions: List[str]) -> List[str]:
     """
     Format a list of issue descriptions into a list of strings with a title case format.

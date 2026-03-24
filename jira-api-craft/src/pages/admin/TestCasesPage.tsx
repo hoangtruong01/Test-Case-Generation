@@ -71,7 +71,13 @@ const TestCasesPage = () => {
     if (!search) return cases;
     const q = search.toLowerCase();
     return cases.filter((c) =>
-      [c.id, c.user, c.jira_project_name]
+      [
+        c.id,
+        c.user,
+        c.jira_project_name,
+        c.postman_workspace,
+        c.postman_collection,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q)),
     );
@@ -89,8 +95,18 @@ const TestCasesPage = () => {
     { key: "user", label: "User", render: (r) => <span>{r.user}</span> },
     {
       key: "jira_project_name",
-      label: "Project",
-      render: (r) => <span>{r.jira_project_name}</span>,
+      label: "Jira project",
+      render: (r) => <span>{r.jira_project_name || "—"}</span>,
+    },
+    {
+      key: "postman_workspace",
+      label: "Postman WS",
+      render: (r) => <span>{r.postman_workspace || "—"}</span>,
+    },
+    {
+      key: "postman_collection",
+      label: "Postman collection",
+      render: (r) => <span>{r.postman_collection || "—"}</span>,
     },
     {
       key: "created_at",
@@ -189,7 +205,11 @@ const TestCasesPage = () => {
         }}
         title={
           modalCase
-            ? `Testcases for ${modalCase.jira_project_name || modalCase.user}`
+            ? `Testcases for ${
+                modalCase.postman_collection
+                  ? `${modalCase.postman_workspace || ""} / ${modalCase.postman_collection}`
+                  : modalCase.jira_project_name || modalCase.user
+              }`
             : "Testcases"
         }
         onSubmit={() => setModalOpen(false)}

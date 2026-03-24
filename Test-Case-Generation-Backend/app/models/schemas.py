@@ -27,6 +27,12 @@ class PostmanAPIKeyRequest(BaseModel):
     api_key: str
 
 
+class PostmanSessionResponse(BaseModel):
+    session_token: str
+    email: str
+    display_name: str = ""
+
+
 class TokenResponse(BaseModel):
     token: str
 
@@ -49,6 +55,8 @@ class AdminTestcaseView(BaseModel):
     id: str
     user: Optional[str] = None
     jira_project_name: Optional[str] = None
+    postman_workspace: Optional[str] = None
+    postman_collection: Optional[str] = None
     created_at: datetime
     testcase_count: int
     testsuite: Optional[List[dict]] = None

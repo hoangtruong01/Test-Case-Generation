@@ -102,7 +102,9 @@ export const deleteTestSuite = (id: string) =>
 export interface AdminTestCase {
   id: string;
   user: string;
-  jira_project_name: string;
+  jira_project_name?: string | null;
+  postman_workspace?: string | null;
+  postman_collection?: string | null;
   created_at: string;
   testcase_count: number;
   testsuite: [

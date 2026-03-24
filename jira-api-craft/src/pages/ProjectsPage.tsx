@@ -192,6 +192,11 @@ const ProjectsPage = () => {
 
   return (
     <div>
+      <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+        <strong>Deprecated:</strong> the recommended flow is{" "}
+        <strong>From Postman</strong> in the sidebar (workspace → collection
+        → test cases → Excel).
+      </div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-foreground">Projects</h1>
         <p className="text-muted-foreground mt-1">
