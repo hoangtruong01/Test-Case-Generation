@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -8,49 +10,97 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
+import Toast from "react-native-toast-message";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuthStore } from "../../store/authStore";
-import { EmptyView } from "../../components/ui/StateViews";
+import { EmptyView, ErrorView, LoadingView } from "../../components/ui/StateViews";
 import { TextInput } from "../../components/ui/TextInput";
 import { RootStackParamList } from "../../navigation/types";
+import { api } from "../../services/api";
+import { AdminJiraToken } from "../../types/jira";
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, "AdminJiraTokens">;
 };
 
-type JiraToken = {
-  id: string;
-  username: string;
-  jiraAccountId: string;
-  refreshToken: string;
-  expiresAt: string;
-};
-
-const MOCK_TOKENS: JiraToken[] = [
-  { id: "tok_1", username: "khoa", jiraAccountId: "5f8d123abc001", refreshToken: "ATJIRA-7d93f4d8b92d9e123456abcdef0987", expiresAt: "2026-05-10" },
-  { id: "tok_2", username: "anna", jiraAccountId: "5f8d123abc002", refreshToken: "ATJIRA-2c93a2f9a8b1a222223456abcdef987", expiresAt: "2026-04-01" },
-  { id: "tok_3", username: "john", jiraAccountId: "5f8d123abc003", refreshToken: "ATJIRA-9aa1f1c98b2d9e888823456abcdef111", expiresAt: "2025-12-01" },
-  { id: "tok_4", username: "lucas", jiraAccountId: "5f8d123abc004", refreshToken: "ATJIRA-2ab8f2f98b2d9e777723456abcdef222", expiresAt: "2026-06-20" },
-];
-
 const maskToken = (token: string) =>
-  token.length > 14 ? `${token.slice(0, 8)}${"*".repeat(12)}${token.slice(-4)}` : token;
+  token.length > 14
+    ? `${token.slice(0, 8)}${"*".repeat(12)}${token.slice(-4)}`
+    : token;
 
 const AdminJiraTokensScreen: React.FC<Props> = ({ navigation }) => {
   const { colors } = useTheme();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  const [tokens, setTokens] = useState<AdminJiraToken[]>([]);
   const [search, setSearch] = useState("");
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTokens = useCallback(async () => {
+    try {
+      setError(null);
+      const rows = await api.getAdminJiraTokens();
+      setTokens(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load Jira tokens");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      fetchTokens();
+    }, [fetchTokens]),
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchTokens();
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return MOCK_TOKENS;
-    return MOCK_TOKENS.filter(
+    if (!q) return tokens;
+    return tokens.filter(
       (t) =>
         t.username.toLowerCase().includes(q) ||
         t.jiraAccountId.toLowerCase().includes(q),
     );
-  }, [search]);
+  }, [tokens, search]);
+
+  const confirmRevoke = (token: AdminJiraToken) => {
+    Alert.alert(
+      "Revoke token",
+      `Revoke Jira token for ${token.username}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Revoke",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await api.revokeAdminJiraToken(token.id);
+              Toast.show({ type: "success", text1: "Token revoked" });
+              fetchTokens();
+            } catch (err) {
+              Toast.show({
+                type: "error",
+                text1: "Revoke failed",
+                text2: err instanceof Error ? err.message : "Please try again",
+              });
+            }
+          },
+        },
+      ],
+    );
+  };
 
   if (!isAuthenticated) {
     return (
@@ -62,6 +112,11 @@ const AdminJiraTokensScreen: React.FC<Props> = ({ navigation }) => {
         onAction={() => navigation.navigate("Login")}
       />
     );
+  }
+
+  if (loading && tokens.length === 0) return <LoadingView message="Loading Jira tokens..." />;
+  if (error && tokens.length === 0) {
+    return <ErrorView title="Failed to load tokens" message={error} onRetry={fetchTokens} />;
   }
 
   return (
@@ -86,6 +141,7 @@ const AdminJiraTokensScreen: React.FC<Props> = ({ navigation }) => {
         data={filtered}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) => {
           const isVisible = visibleIds.has(item.id);
           const isExpired = new Date(item.expiresAt) < new Date();
@@ -96,6 +152,7 @@ const AdminJiraTokensScreen: React.FC<Props> = ({ navigation }) => {
                 <TouchableOpacity
                   style={[styles.revokeBtn, { borderColor: colors.destructive }]}
                   activeOpacity={0.8}
+                  onPress={() => confirmRevoke(item)}
                 >
                   <Ionicons name="remove-circle-outline" size={14} color={colors.destructive} />
                   <Text style={[styles.revokeText, { color: colors.destructive }]}>Revoke</Text>

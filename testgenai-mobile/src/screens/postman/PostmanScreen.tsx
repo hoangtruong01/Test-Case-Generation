@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   RefreshControl,
@@ -16,7 +17,7 @@ import { TextInput } from "../../components/ui/TextInput";
 import { LoadingView, EmptyView } from "../../components/ui/StateViews";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { PostmanCollection } from "../../types/jira";
+import { PostmanCollection, PostmanWorkspace } from "../../types/jira";
 import Toast from "react-native-toast-message";
 
 type Props = {
@@ -28,6 +29,8 @@ const PostmanScreen: React.FC<Props> = ({ navigation }) => {
   const { isPostmanAuthenticated, loginPostman, postmanApiKey } =
     useAuthStore();
   const [collections, setCollections] = useState<PostmanCollection[]>([]);
+  const [workspaces, setWorkspaces] = useState<PostmanWorkspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("ALL");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -35,7 +38,9 @@ const PostmanScreen: React.FC<Props> = ({ navigation }) => {
 
   const fetchCollections = useCallback(async () => {
     try {
-      const res = await api.getPostmanCollections();
+      const workspaceId =
+        selectedWorkspaceId !== "ALL" ? selectedWorkspaceId : undefined;
+      const res = await api.getPostmanCollections(workspaceId);
       if (res.error) {
         Toast.show({ type: "error", text1: res.error });
         return;
@@ -44,18 +49,37 @@ const PostmanScreen: React.FC<Props> = ({ navigation }) => {
     } catch (err) {
       console.error("fetchCollections", err);
     }
+  }, [selectedWorkspaceId]);
+
+  const fetchWorkspaces = useCallback(async () => {
+    try {
+      const res = await api.getPostmanWorkspaces();
+      if (res.error) {
+        Toast.show({ type: "error", text1: res.error });
+        return;
+      }
+      setWorkspaces(res.workspaces || []);
+    } catch {
+      Toast.show({ type: "error", text1: "Failed to load workspaces" });
+    }
   }, []);
 
   useEffect(() => {
     if (isPostmanAuthenticated) {
       setLoading(true);
-      fetchCollections().finally(() => setLoading(false));
+      fetchWorkspaces().finally(() => setLoading(false));
     }
-  }, [isPostmanAuthenticated, fetchCollections]);
+  }, [isPostmanAuthenticated, fetchWorkspaces]);
+
+  useEffect(() => {
+    if (!isPostmanAuthenticated) return;
+    setLoading(true);
+    fetchCollections().finally(() => setLoading(false));
+  }, [isPostmanAuthenticated, selectedWorkspaceId, fetchCollections]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchCollections();
+    await Promise.all([fetchWorkspaces(), fetchCollections()]);
     setRefreshing(false);
   };
 
@@ -176,6 +200,87 @@ const PostmanScreen: React.FC<Props> = ({ navigation }) => {
         </View>
       </View>
 
+      <View
+        style={[
+          styles.connectedCard,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.card,
+          },
+        ]}
+      >
+        <Ionicons name="key-outline" size={14} color={colors.orange} />
+        <Text style={[styles.connectedText, { color: colors.textSecondary }]}>
+          Connected key: {postmanApiKey ? `${postmanApiKey.slice(0, 8)}...` : "N/A"}
+        </Text>
+      </View>
+
+      <View style={styles.workspaceSection}>
+        <Text style={[styles.workspaceLabel, { color: colors.textMuted }]}>
+          Workspace
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.workspaceScrollContent}
+        >
+          <TouchableOpacity
+            onPress={() => setSelectedWorkspaceId("ALL")}
+            style={[
+              styles.workspaceChip,
+              {
+                borderColor:
+                  selectedWorkspaceId === "ALL" ? colors.orange : colors.border,
+                backgroundColor:
+                  selectedWorkspaceId === "ALL"
+                    ? colors.orangeLight
+                    : colors.card,
+              },
+            ]}
+          >
+            <Text
+              style={{
+                color:
+                  selectedWorkspaceId === "ALL"
+                    ? colors.orange
+                    : colors.textMuted,
+                fontSize: 12,
+                fontWeight: "700",
+              }}
+            >
+              All Workspaces
+            </Text>
+          </TouchableOpacity>
+
+          {workspaces.map((ws) => {
+            const isActive = selectedWorkspaceId === ws.id;
+            return (
+              <TouchableOpacity
+                key={ws.id}
+                onPress={() => setSelectedWorkspaceId(ws.id)}
+                style={[
+                  styles.workspaceChip,
+                  {
+                    borderColor: isActive ? colors.orange : colors.border,
+                    backgroundColor: isActive ? colors.orangeLight : colors.card,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: isActive ? colors.orange : colors.textMuted,
+                    fontSize: 12,
+                    fontWeight: "700",
+                  }}
+                >
+                  {ws.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       <FlatList
         data={collections}
         keyExtractor={(item) => item.id}
@@ -207,11 +312,32 @@ const styles = StyleSheet.create({
   headerRow: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 8,
+    paddingBottom: 6,
   },
   title: { fontSize: 22, fontWeight: "700" },
   subtitle: { fontSize: 13, marginTop: 4 },
-  list: { padding: 16, paddingTop: 8 },
+  workspaceSection: { paddingHorizontal: 16, paddingBottom: 6 },
+  connectedCard: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  connectedText: { fontSize: 12, fontWeight: "600" },
+  workspaceLabel: { fontSize: 12, fontWeight: "600", marginBottom: 8 },
+  workspaceScrollContent: { gap: 8, paddingHorizontal: 4 },
+  workspaceChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  list: { padding: 16, paddingTop: 6 },
   collectionRow: {
     flexDirection: "row",
     alignItems: "center",

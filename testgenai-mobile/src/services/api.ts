@@ -4,10 +4,15 @@ import {
   JiraProject,
   PostmanCollection,
   PostmanCollectionDetail,
+  PostmanWorkspace,
   AdminUser,
   AdminStats,
   AdminTestCase,
+  AdminProject,
+  AdminJiraToken,
+  AdminTestSuite,
 } from "../types/jira";
+import { encode as encodeBase64 } from "base-64";
 import { storage } from "./storage";
 
 /**
@@ -100,6 +105,71 @@ const mapAdminTestCase = (row: Record<string, unknown>): AdminTestCase => {
     createdAt: String(row.created_at || ""),
   };
 };
+
+const shouldUseMockFallback = (err: unknown): boolean => {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return msg.includes("404") || msg.includes("not found");
+};
+
+let mockAdminProjects: AdminProject[] = [
+  {
+    id: "p1",
+    projectName: "Postbot Automation",
+    description: "Automation testing for Postman collections",
+    owner: "khoa",
+    totalTestSuites: 8,
+    createdAt: "2024-01-10",
+  },
+  {
+    id: "p2",
+    projectName: "AI Test Generator",
+    description: "Generate API test cases using AI",
+    owner: "anna",
+    totalTestSuites: 5,
+    createdAt: "2024-02-01",
+  },
+];
+
+let mockAdminJiraTokens: AdminJiraToken[] = [
+  {
+    id: "tok_1",
+    username: "khoa",
+    jiraAccountId: "5f8d123abc001",
+    refreshToken: "ATJIRA-7d93f4d8b92d9e123456abcdef0987",
+    expiresAt: "2026-05-10",
+    createdAt: "2025-12-01",
+  },
+  {
+    id: "tok_2",
+    username: "anna",
+    jiraAccountId: "5f8d123abc002",
+    refreshToken: "ATJIRA-2c93a2f9a8b1a222223456abcdef987",
+    expiresAt: "2026-04-01",
+    createdAt: "2025-12-20",
+  },
+];
+
+let mockAdminTestSuites: AdminTestSuite[] = [
+  {
+    id: "s1",
+    suiteName: "User Authentication",
+    projectId: "p1",
+    projectName: "Auth Service",
+    description: "Login and token validation",
+    totalTestCases: 12,
+    createdAt: "2024-03-01",
+  },
+  {
+    id: "s2",
+    suiteName: "Payment API",
+    projectId: "p2",
+    projectName: "Payment Service",
+    description: "Payment gateway coverage",
+    totalTestCases: 8,
+    createdAt: "2024-03-05",
+  },
+];
 
 export const api = {
   // ==================== JIRA ====================
@@ -234,13 +304,16 @@ export const api = {
     }
   },
 
-  async getPostmanCollections(): Promise<{
+  async getPostmanCollections(workspaceId?: string): Promise<{
     collections?: PostmanCollection[];
     error?: string;
   }> {
     try {
       const headers = await withSession();
-      const response = await apiCall("/postman/collections", {
+      const query = workspaceId
+        ? `?workspace=${encodeURIComponent(workspaceId)}`
+        : "";
+      const response = await apiCall(`/postman/collections${query}`, {
         method: "GET",
         headers,
       });
@@ -271,6 +344,44 @@ export const api = {
     }
   },
 
+  async getPostmanWorkspaces(): Promise<{
+    workspaces?: PostmanWorkspace[];
+    error?: string;
+  }> {
+    try {
+      const headers = await withSession();
+      const response = await apiCall("/postman/workspaces", {
+        method: "GET",
+        headers,
+      });
+
+      const raw = Array.isArray(response)
+        ? response
+        : response.workspaces && Array.isArray(response.workspaces)
+          ? response.workspaces
+          : null;
+
+      if (raw) {
+        return {
+          workspaces: raw.map(
+            (w: Record<string, unknown>): PostmanWorkspace => ({
+              id: String(w.id || ""),
+              name: String(w.name || "Untitled workspace"),
+              type: typeof w.type === "string" ? w.type : undefined,
+            }),
+          ),
+        };
+      }
+
+      return { workspaces: [] };
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error ? err.message : "Failed to load workspaces",
+      };
+    }
+  },
+
   async getPostmanCollection(
     collectionId: string,
   ): Promise<{ collection?: PostmanCollectionDetail; error?: string }> {
@@ -290,6 +401,76 @@ export const api = {
         error: err instanceof Error ? err.message : "Failed to load collection",
       };
     }
+  },
+
+  exportTestcasesToCsv(
+    testcases: Array<{
+      title: string;
+      description?: string;
+      test_steps?: string[];
+      expected_result?: string;
+      status?: string;
+    }>,
+  ): string {
+    const escapeCell = (value: unknown): string => {
+      const text = String(value ?? "");
+      if (/[",\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+      }
+      return text;
+    };
+
+    const headers = [
+      "Title",
+      "Description",
+      "Test Steps",
+      "Expected Result",
+      "Status",
+    ];
+
+    const rows = testcases.map((tc) => [
+      escapeCell(tc.title),
+      escapeCell(tc.description || ""),
+      escapeCell((tc.test_steps || []).join(" | ")),
+      escapeCell(tc.expected_result || ""),
+      escapeCell(tc.status || ""),
+    ]);
+
+    return [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  },
+
+  async downloadTestcasesExcel(
+    rows: Array<Record<string, unknown>>,
+  ): Promise<{ filename: string; base64: string }> {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      throw new Error("No testcases to export");
+    }
+
+    const headers = await withSession();
+    const response = await fetch(`${API_BASE_URL}/export-excel`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(rows),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Excel export failed: ${response.statusText}`);
+    }
+
+    const contentDisposition = response.headers.get("content-disposition") || "";
+    const nameMatch = contentDisposition.match(/filename=\"?([^\";]+)\"?/i);
+    const filename = nameMatch?.[1] || "testcases.xlsx";
+
+    const buffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+
+    return { filename, base64: encodeBase64(binary) };
   },
 
   // ==================== TEST GENERATION ====================
@@ -530,5 +711,258 @@ export const api = {
 
     if (!projectKey) return mapped;
     return mapped.filter((tc: AdminTestCase) => tc.projectKey === projectKey);
+  },
+
+  async getAdminProjects(): Promise<AdminProject[]> {
+    try {
+      const headers = await withAuth();
+      const response = await apiCall("/admin/projects", { method: "GET", headers });
+      const raw = Array.isArray(response) ? response : response.projects || [];
+
+      return raw.map((p: Record<string, unknown>): AdminProject => ({
+        id: String(p.id || ""),
+        projectName: String(p.projectName || p.project_name || "Untitled"),
+        description: String(p.description || ""),
+        owner: String(p.owner || p.user || "system"),
+        totalTestSuites: Number(p.totalTestSuites || p.total_test_suites || 0),
+        createdAt: String(p.createdAt || p.created_at || new Date().toISOString()),
+      }));
+    } catch (err) {
+      if (shouldUseMockFallback(err)) return [...mockAdminProjects];
+      throw err;
+    }
+  },
+
+  async createAdminProject(payload: {
+    projectName: string;
+    description: string;
+    owner: string;
+  }): Promise<AdminProject> {
+    try {
+      const headers = await withAuth();
+      const response = (await apiCall("/admin/projects", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      })) as Record<string, unknown>;
+
+      return {
+        id: String(response.id || ""),
+        projectName: String(response.projectName || payload.projectName),
+        description: String(response.description || payload.description),
+        owner: String(response.owner || payload.owner),
+        totalTestSuites: Number(response.totalTestSuites || 0),
+        createdAt: String(response.createdAt || new Date().toISOString()),
+      };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+
+      const created: AdminProject = {
+        id: `p${Date.now()}`,
+        projectName: payload.projectName,
+        description: payload.description,
+        owner: payload.owner,
+        totalTestSuites: 0,
+        createdAt: new Date().toISOString(),
+      };
+      mockAdminProjects = [created, ...mockAdminProjects];
+      return created;
+    }
+  },
+
+  async updateAdminProject(
+    id: string,
+    payload: Partial<Pick<AdminProject, "projectName" | "description" | "owner">>,
+  ): Promise<AdminProject> {
+    try {
+      const headers = await withAuth();
+      const response = (await apiCall(`/admin/projects/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      })) as Record<string, unknown>;
+
+      return {
+        id,
+        projectName: String(response.projectName || payload.projectName || "Untitled"),
+        description: String(response.description || payload.description || ""),
+        owner: String(response.owner || payload.owner || "system"),
+        totalTestSuites: Number(response.totalTestSuites || 0),
+        createdAt: String(response.createdAt || new Date().toISOString()),
+      };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+
+      const current = mockAdminProjects.find((p) => p.id === id);
+      if (!current) throw new Error("Project not found");
+      const updated: AdminProject = { ...current, ...payload };
+      mockAdminProjects = mockAdminProjects.map((p) => (p.id === id ? updated : p));
+      return updated;
+    }
+  },
+
+  async deleteAdminProject(id: string): Promise<{ success: boolean }> {
+    try {
+      const headers = await withAuth();
+      await apiCall(`/admin/projects/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers,
+      });
+      return { success: true };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+
+      mockAdminProjects = mockAdminProjects.filter((p) => p.id !== id);
+      return { success: true };
+    }
+  },
+
+  async getAdminJiraTokens(): Promise<AdminJiraToken[]> {
+    try {
+      const headers = await withAuth();
+      const response = await apiCall("/admin/jira-tokens", {
+        method: "GET",
+        headers,
+      });
+      const raw = Array.isArray(response) ? response : response.tokens || [];
+
+      return raw.map((t: Record<string, unknown>): AdminJiraToken => ({
+        id: String(t.id || ""),
+        username: String(t.username || t.user || "unknown"),
+        jiraAccountId: String(t.jiraAccountId || t.jira_account_id || ""),
+        refreshToken: String(t.refreshToken || t.refresh_token || ""),
+        expiresAt: String(t.expiresAt || t.expires_at || ""),
+        createdAt: String(t.createdAt || t.created_at || new Date().toISOString()),
+      }));
+    } catch (err) {
+      if (shouldUseMockFallback(err)) return [...mockAdminJiraTokens];
+      throw err;
+    }
+  },
+
+  async revokeAdminJiraToken(id: string): Promise<{ success: boolean }> {
+    try {
+      const headers = await withAuth();
+      await apiCall(`/admin/jira-tokens/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers,
+      });
+      return { success: true };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+      mockAdminJiraTokens = mockAdminJiraTokens.filter((t) => t.id !== id);
+      return { success: true };
+    }
+  },
+
+  async getAdminTestSuites(): Promise<AdminTestSuite[]> {
+    try {
+      const headers = await withAuth();
+      const response = await apiCall("/admin/test-suites", {
+        method: "GET",
+        headers,
+      });
+      const raw = Array.isArray(response) ? response : response.testSuites || [];
+
+      return raw.map((s: Record<string, unknown>): AdminTestSuite => ({
+        id: String(s.id || ""),
+        suiteName: String(s.suiteName || s.suite_name || "Untitled suite"),
+        projectId: String(s.projectId || s.project_id || ""),
+        projectName: String(s.projectName || s.project_name || "Unknown"),
+        description: String(s.description || ""),
+        totalTestCases: Number(s.totalTestCases || s.total_test_cases || 0),
+        createdAt: String(s.createdAt || s.created_at || new Date().toISOString()),
+      }));
+    } catch (err) {
+      if (shouldUseMockFallback(err)) return [...mockAdminTestSuites];
+      throw err;
+    }
+  },
+
+  async createAdminTestSuite(payload: {
+    suiteName: string;
+    projectId: string;
+    projectName: string;
+    description: string;
+  }): Promise<AdminTestSuite> {
+    try {
+      const headers = await withAuth();
+      const response = (await apiCall("/admin/test-suites", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      })) as Record<string, unknown>;
+
+      return {
+        id: String(response.id || ""),
+        suiteName: String(response.suiteName || payload.suiteName),
+        projectId: String(response.projectId || payload.projectId),
+        projectName: String(response.projectName || payload.projectName),
+        description: String(response.description || payload.description),
+        totalTestCases: Number(response.totalTestCases || 0),
+        createdAt: String(response.createdAt || new Date().toISOString()),
+      };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+
+      const created: AdminTestSuite = {
+        id: `s${Date.now()}`,
+        suiteName: payload.suiteName,
+        projectId: payload.projectId,
+        projectName: payload.projectName,
+        description: payload.description,
+        totalTestCases: 0,
+        createdAt: new Date().toISOString(),
+      };
+      mockAdminTestSuites = [created, ...mockAdminTestSuites];
+      return created;
+    }
+  },
+
+  async updateAdminTestSuite(
+    id: string,
+    payload: Partial<Pick<AdminTestSuite, "suiteName" | "projectId" | "projectName" | "description">>,
+  ): Promise<AdminTestSuite> {
+    try {
+      const headers = await withAuth();
+      const response = (await apiCall(`/admin/test-suites/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      })) as Record<string, unknown>;
+
+      return {
+        id,
+        suiteName: String(response.suiteName || payload.suiteName || "Untitled suite"),
+        projectId: String(response.projectId || payload.projectId || ""),
+        projectName: String(response.projectName || payload.projectName || "Unknown"),
+        description: String(response.description || payload.description || ""),
+        totalTestCases: Number(response.totalTestCases || 0),
+        createdAt: String(response.createdAt || new Date().toISOString()),
+      };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+
+      const current = mockAdminTestSuites.find((s) => s.id === id);
+      if (!current) throw new Error("Test suite not found");
+      const updated: AdminTestSuite = { ...current, ...payload };
+      mockAdminTestSuites = mockAdminTestSuites.map((s) => (s.id === id ? updated : s));
+      return updated;
+    }
+  },
+
+  async deleteAdminTestSuite(id: string): Promise<{ success: boolean }> {
+    try {
+      const headers = await withAuth();
+      await apiCall(`/admin/test-suites/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers,
+      });
+      return { success: true };
+    } catch (err) {
+      if (!shouldUseMockFallback(err)) throw err;
+      mockAdminTestSuites = mockAdminTestSuites.filter((s) => s.id !== id);
+      return { success: true };
+    }
   },
 };

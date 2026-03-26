@@ -144,6 +144,22 @@ const ProjectsScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.notice,
+          {
+            borderColor: colors.orange + "45",
+            backgroundColor: colors.orange + "12",
+          },
+        ]}
+      >
+        <Ionicons name="alert-circle-outline" size={16} color={colors.orange} />
+        <Text style={[styles.noticeText, { color: colors.orange }]}>
+          Preferred flow from web: Postman Flow (workspace {"->"} collection {"->"}
+          testcases {"->"} export).
+        </Text>
+      </View>
+
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: colors.text }]}>Projects</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -171,6 +187,18 @@ export default ProjectsScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  notice: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  noticeText: { flex: 1, fontSize: 12, fontWeight: "600" },
   headerRow: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 },
   title: { fontSize: 24, fontWeight: "700" },
   subtitle: { fontSize: 13, marginTop: 4 },

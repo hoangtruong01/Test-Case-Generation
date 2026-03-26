@@ -1,11 +1,16 @@
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
+  Platform,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTheme } from "../../context/ThemeContext";
@@ -14,6 +19,8 @@ import { RootStackParamList } from "../../navigation/types";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { EmptyView } from "../../components/ui/StateViews";
+import { api } from "../../services/api";
+import Toast from "react-native-toast-message";
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, "GeneratedTestcases">;
@@ -124,6 +131,124 @@ const GeneratedTestcasesScreen: React.FC<Props> = ({ navigation }) => {
     navigation.navigate("CollectionPicker", { testcases: payload });
   };
 
+  const handleExportCsv = async () => {
+    if (selectedTests.length === 0) {
+      Toast.show({
+        type: "info",
+        text1: "No testcases selected",
+        text2: "Select at least one testcase to export",
+      });
+      return;
+    }
+
+    const rows = selectedTests.map((t) => ({
+      title: t.title,
+      description: t.description || "",
+      test_steps: t.steps,
+      expected_result: t.expected || "",
+      status: t.status || "",
+    }));
+
+    const csv = api.exportTestcasesToCsv(rows);
+
+    await Clipboard.setStringAsync(csv);
+    await Share.share({
+      title: "Generated testcases (CSV)",
+      message: csv,
+    });
+
+    Toast.show({
+      type: "success",
+      text1: "CSV ready",
+      text2: "CSV has been copied to clipboard",
+    });
+  };
+
+  const handleExportExcel = async () => {
+    if (selectedTests.length === 0) {
+      Toast.show({
+        type: "info",
+        text1: "No testcases selected",
+        text2: "Select at least one testcase to export",
+      });
+      return;
+    }
+
+    const payload = selectedTests.map((t, index) => ({
+      test_case_id: t.id || `TC-${index + 1}`,
+      title: t.title,
+      priority: "Medium",
+      module: "API",
+      description: t.description || "",
+      pre_conditions: [],
+      test_steps: (t.steps || []).map((step, stepIndex) => ({
+        step_number: stepIndex + 1,
+        action: step,
+        test_data: "",
+      })),
+      expected_result: t.expected || "Expected behavior matches requirements",
+      actual_result: "",
+      status: t.status || "Pending",
+      post_conditions: [],
+    }));
+
+    try {
+      const { filename, base64 } = await api.downloadTestcasesExcel(
+        payload as unknown as Record<string, unknown>[],
+      );
+
+      if (Platform.OS === "web") {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+
+        const blob = new Blob([bytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        const targetDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+        if (!targetDir) throw new Error("Unable to access local storage");
+
+        const filePath = `${targetDir}${filename}`;
+        await FileSystem.writeAsStringAsync(filePath, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(filePath, {
+            mimeType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            dialogTitle: "Export Testcases",
+          });
+        } else {
+          await Share.share({ message: `Excel file saved: ${filePath}` });
+        }
+      }
+
+      Toast.show({
+        type: "success",
+        text1: "Excel exported",
+        text2: filename,
+      });
+    } catch (err) {
+      Toast.show({
+        type: "error",
+        text1: "Export failed",
+        text2: err instanceof Error ? err.message : "Unable to export Excel",
+      });
+    }
+  };
+
   if (tests.length === 0) {
     return (
       <EmptyView
@@ -200,6 +325,22 @@ const GeneratedTestcasesScreen: React.FC<Props> = ({ navigation }) => {
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}> 
         <Button
+          title="Export Excel"
+          onPress={handleExportExcel}
+          variant="primary"
+          size="lg"
+          icon={<Ionicons name="download" size={16} color={colors.primaryForeground} />}
+          style={styles.secondaryButton}
+        />
+        <Button
+          title="Export CSV"
+          onPress={handleExportCsv}
+          variant="outline"
+          size="lg"
+          icon={<Ionicons name="download-outline" size={16} color={colors.primary} />}
+          style={styles.secondaryButton}
+        />
+        <Button
           title="Generate Endpoints"
           onPress={handleGenerateEndpoints}
           variant="primary"
@@ -250,5 +391,8 @@ const styles = StyleSheet.create({
   footer: {
     borderTopWidth: 1,
     padding: 16,
+  },
+  secondaryButton: {
+    marginBottom: 10,
   },
 });

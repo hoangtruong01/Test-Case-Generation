@@ -40,6 +40,12 @@ export type PostmanCollection = {
   createdAt?: string;
 };
 
+export type PostmanWorkspace = {
+  id: string;
+  name: string;
+  type?: string;
+};
+
 export type PostmanCollectionDetail = {
   id?: string;
   name?: string;
@@ -97,5 +103,33 @@ export interface AdminTestCase {
   issueKey: string;
   requirement?: string;
   tests: Test[];
+  createdAt: string;
+}
+
+export interface AdminProject {
+  id: string;
+  projectName: string;
+  description: string;
+  owner: string;
+  totalTestSuites: number;
+  createdAt: string;
+}
+
+export interface AdminJiraToken {
+  id: string;
+  username: string;
+  jiraAccountId: string;
+  refreshToken: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface AdminTestSuite {
+  id: string;
+  suiteName: string;
+  projectId: string;
+  projectName: string;
+  description: string;
+  totalTestCases: number;
   createdAt: string;
 }
