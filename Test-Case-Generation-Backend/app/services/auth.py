@@ -224,14 +224,25 @@ async def _resolve_postman_session(x_session_token: str) -> tuple[dict, str, str
     if key is None:
         raise HTTPException(status_code=401, detail="Missing Postman API Key")
 
-    user_resp = await get_user(key)
-    if user_resp is None:
-        raise HTTPException(status_code=401, detail="Invalid Postman API Key")
+    username = session.get("username", "")
 
-    username = session.get("username")
-    if not username:
-        u = user_resp.get("user") or {}
-        username = u.get("email") or u.get("username") or ""
+    # Only re-validate the Postman API key if we haven't confirmed it recently.
+    # Cache the validation result for 10 minutes to avoid hitting api.getpostman.com
+    # on every request (which causes 500s when the network is slow/unavailable).
+    validation_cache_key = f"postman_key_valid:{key[:16]}"
+    already_validated = await cache_get(validation_cache_key)
+
+    if not already_validated:
+        user_resp = await get_user(key)
+        if user_resp is None:
+            raise HTTPException(status_code=401, detail="Invalid Postman API Key")
+        if not username:
+            u = user_resp.get("user") or {}
+            username = u.get("email") or u.get("username") or ""
+            if username:
+                session["username"] = username
+                await cache_set(key=x_session_token, value=session)
+        await cache_set(key=validation_cache_key, value={"ok": True}, expire_in=600)
 
     if username:
         db = await get_client()

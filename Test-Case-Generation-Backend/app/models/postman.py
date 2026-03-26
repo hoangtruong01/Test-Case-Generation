@@ -111,6 +111,9 @@ class PostmanEndpointForTests(BaseModel):
     method: str
     url: str
     description: Optional[str] = None
+    # Headers/body are required to execute the endpoint before generating tests.
+    headers: Optional[List[Header]] = None
+    body_raw: Optional[str] = None
     body_excerpt: Optional[str] = None
     folder: Optional[str] = None
 

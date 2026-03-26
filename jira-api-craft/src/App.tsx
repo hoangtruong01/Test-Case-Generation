@@ -13,6 +13,7 @@ import PostmanFlowPage from "./pages/PostmanFlowPage";
 import SettingsPage from "./pages/SettingsPage";
 import EndpointsPage from "./pages/EndpointsPage";
 import GeneratedTestcasesPage from "./pages/GeneratedTestcasesPage";
+import MyTestcasesPage from "./pages/MyTestcasesPage";
 import NotFound from "./pages/NotFound";
 import UsersPage from "./pages/admin/UsersPage";
 import JiraTokensPage from "./pages/admin/JiraTokensPage";
@@ -44,10 +45,8 @@ const App = () => (
                   <Route path="projects/:projectName" element={<IssuesPage />} />
                   <Route path="postman" element={<PostmanFlowPage />} />
                   <Route path="endpoints" element={<EndpointsPage />} />
-                  <Route
-                    path="testcases"
-                    element={<GeneratedTestcasesPage />}
-                  />
+                  <Route path="testcases" element={<GeneratedTestcasesPage />} />
+                  <Route path="my-testcases" element={<MyTestcasesPage />} />
                   <Route path="settings" element={<SettingsPage />} />
                 </Route>
 

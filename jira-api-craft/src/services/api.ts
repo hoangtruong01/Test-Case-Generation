@@ -392,6 +392,19 @@ export const api = {
     }
   },
 
+  async getMyTestcases(): Promise<{ testcases: Array<Record<string, unknown>> } | { error: string }> {
+    const session = getSessionToken();
+    if (!session) return { error: "Not authenticated" };
+    try {
+      return await apiCall("/postman/testcases", {
+        method: "GET",
+        headers: { "x-session-token": session },
+      });
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Failed to load testcases" };
+    }
+  },
+
   async generateTestcasesFromPostman(payload: {
     postman_workspace: string;
     postman_workspace_id?: string;

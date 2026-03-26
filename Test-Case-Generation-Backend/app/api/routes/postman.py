@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi import APIRouter, Query, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from app.core.postman import (
     get_all_collections,
@@ -9,7 +9,7 @@ from app.core.postman import (
 )
 from app.services.postman import generate_all_test_scripts, generate_http_requests
 from app.services.auth import verify_postman_session, verify_postman_session_identity
-from app.services.llm import generate_tests_from_postman
+from app.services.llm import generate_tests_from_postman, generate_tests_from_postman_ws
 from app.models.schemas import GenericResponse
 from app.models.postman import (
     PostmanTestScriptRequest,
@@ -19,7 +19,9 @@ from app.models.postman import (
     GenerateHttpRequestsRequest,
     GenerateTestcasesFromPostmanRequest,
 )
+from app.core.cache import cache_get
 from typing import List, Optional
+import json
 
 router = APIRouter()
 
@@ -175,6 +177,31 @@ async def request(collectionId: str, session=Depends(verify_postman_session)):
 
 
 @router.api_route(
+    path="/testcases",
+    summary="Get all testcase suites for the logged-in user",
+    description="Returns all testcase rows saved under the authenticated Postman user's email.",
+    responses={
+        200: {"description": "Testcase suites returned"},
+        401: {"model": GenericResponse},
+    },
+    methods=["GET"],
+    response_class=JSONResponse,
+)
+async def get_my_testcases(session_identity: dict = Depends(verify_postman_session_identity)):
+    from app.core.database import get_client
+    username = session_identity["username"]
+    db = await get_client()
+    rows = await (
+        db.table("testcase")
+        .select("id, user, jira_project_name, postman_workspace, postman_collection, testsuite, created_at")
+        .eq("user", username)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return JSONResponse(content={"testcases": rows.data or []})
+
+
+@router.api_route(
     path="/testcases/generate",
     summary="Generate test cases from selected Postman endpoints",
     description=(
@@ -227,3 +254,58 @@ async def generate_http(request: GenerateHttpRequestsRequest, session: str = Dep
         think=request.think or False,
     )
     return JSONResponse(content=result)
+
+
+@router.websocket("/testcases/generate/ws")
+async def generate_testcases_ws(websocket: WebSocket, token: str):
+    """
+    WebSocket endpoint for real-time test case generation.
+    Client sends the GenerateTestcasesFromPostmanRequest payload as JSON after connecting.
+    Server streams progress events:
+      { "type": "endpoint_start",   "index": i, "name": "...", "method": "...", "url": "..." }
+      { "type": "endpoint_done",    "index": i, "status_code": 200, "error": "" }
+      { "type": "llm_start" }
+      { "type": "done",             "testcases": [...] }
+      { "type": "error",            "message": "..." }
+    """
+    await websocket.accept()
+
+    # Resolve session from token query param
+    session = await cache_get(token)
+    if session is None:
+        await websocket.send_text(json.dumps({"type": "error", "message": "Invalid session token"}))
+        await websocket.close()
+        return
+
+    postman_key = session.get("postman")
+    if not postman_key:
+        await websocket.send_text(json.dumps({"type": "error", "message": "Missing Postman API key in session"}))
+        await websocket.close()
+        return
+
+    username = session.get("username", "")
+
+    try:
+        raw = await websocket.receive_text()
+        payload_dict = json.loads(raw)
+        request = GenerateTestcasesFromPostmanRequest(**payload_dict)
+    except Exception as e:
+        await websocket.send_text(json.dumps({"type": "error", "message": f"Invalid payload: {e}"}))
+        await websocket.close()
+        return
+
+    try:
+        async for event in generate_tests_from_postman_ws(request, username):
+            await websocket.send_text(json.dumps(event))
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        try:
+            await websocket.send_text(json.dumps({"type": "error", "message": str(e)}))
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
