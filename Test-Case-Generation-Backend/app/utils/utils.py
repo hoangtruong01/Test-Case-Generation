@@ -93,17 +93,41 @@ def format_postman_endpoints_for_llm(endpoints: List[Any]) -> List[str]:
         desc = (ep.get("description") or "").strip()
         folder = (ep.get("folder") or "").strip()
         body = (ep.get("body_excerpt") or "").strip()
-        parts = [f"{method} {url}"]
+
+        observed_status = ep.get("observed_status_code")
+        observed_body = (ep.get("observed_body_excerpt") or "").strip()
+        observed_error = (ep.get("observed_error") or "").strip()
+
+        # Emphasize the execution result (what the API actually returned),
+        # since the testcase generation should be response-driven.
+        status_part = (
+            f"Observed response status: {observed_status}"
+            if observed_status is not None
+            else "Observed response status: unknown"
+        )
+
+        if observed_error:
+            observed_part = f"Observed error: {observed_error}"
+        else:
+            if observed_body:
+                excerpt = observed_body[:1600] + ("…" if len(observed_body) > 1600 else "")
+                observed_part = f"{status_part}; Observed body excerpt: {excerpt}"
+            else:
+                observed_part = status_part
+
+        request_part = [f"Request: {method} {url}"]
         if name:
-            parts.append(name)
+            request_part.append(name)
         if folder:
-            parts.append(f"(folder: {folder})")
+            request_part.append(f"(folder: {folder})")
         if desc:
-            parts.append(desc)
+            request_part.append(f"Notes: {desc}")
         if body:
-            excerpt = body[:1200] + ("…" if len(body) > 1200 else "")
-            parts.append(f"Body excerpt: {excerpt}")
-        lines.append(" — ".join(parts))
+            excerpt = body[:800] + ("…" if len(body) > 800 else "")
+            request_part.append(f"Request body excerpt: {excerpt}")
+
+        parts = [observed_part, *request_part]
+        lines.append(" | ".join(parts))
     return lines
 
 

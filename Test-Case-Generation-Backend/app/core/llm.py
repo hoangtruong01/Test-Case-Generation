@@ -111,7 +111,7 @@ Each TestCase object MUST contain:
     - step_number: integer (1-based)
     - action: string describing what the tester does
     - test_data: string with input data for this step, or null
-- expected_result: string describing the expected outcome
+- expected_result: string describing the expected outcome — MUST be derived from the observed API response body and status code provided in the requirements
 - actual_result: empty string ""
 - status: "Pending"
 - post_conditions: array of strings describing state after test, or null
@@ -120,11 +120,15 @@ Each TestCase object MUST contain:
     - created_date: today's date in "YYYY-MM-DD" format
     - environment: "Staging"
 
-STRICT BEHAVIORAL RULES:
+RESPONSE-DRIVEN TEST GENERATION RULES:
 
-- Derive test cases only from the provided requirements.
-- Do not invent functionality not described in the requirements.
-- Cover both happy path and edge cases where applicable.
+- Each requirement entry includes an "Observed response status" and "Observed body excerpt" from a real API execution.
+- You MUST base the expected_result of each test case on the actual observed response (status code + body).
+- If the observed status is 200 and the body contains data, the expected_result should reflect that specific response structure.
+- If the observed status is 4xx or 5xx, generate test cases that validate the error handling behavior.
+- If an observed error is present, generate test cases that cover the failure scenario and its expected behavior.
+- Cover both the happy path (matching the observed success response) and edge cases (invalid inputs, missing auth, etc.).
+- Do not invent response structures not present in the observed body.
 - Do not describe your reasoning.
 - Do not output anything outside the JSON object.
 

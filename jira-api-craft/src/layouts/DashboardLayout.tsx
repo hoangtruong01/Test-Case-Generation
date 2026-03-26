@@ -19,12 +19,14 @@ import {
   FlaskConical,
   TestTubes,
   ChevronDown,
+  History,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { to: "/dashboard/postman", label: "From Postman", icon: Send },
-  { to: "/dashboard/testcases", label: "Test cases", icon: FlaskConical },
+  { to: "/dashboard/testcases", label: "Last generated", icon: FlaskConical },
+  { to: "/dashboard/my-testcases", label: "My test cases", icon: History },
   { to: "/dashboard/projects", label: "Jira (deprecated)", icon: FolderKanban },
   { to: "/dashboard/endpoints", label: "Browse endpoints", icon: Webhook },
   { to: "/dashboard/settings", label: "Settings", icon: Settings },
